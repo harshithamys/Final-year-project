@@ -1,0 +1,48 @@
+# UHI Analysis System - Enhanced Dependencies
+# Install with: pip install -r requirements.txt
+
+# ======================
+# Core Dependencies
+# ======================
+pandas>=1.3.0
+numpy>=1.21.0
+scikit-learn>=1.0.0
+matplotlib>=3.4.0
+
+# ======================
+# Advanced ML Models
+# ======================
+# Gradient Boosting Libraries (optional but recommended)
+xgboost>=1.5.0
+lightgbm>=3.3.0
+# catboost>=1.0.0  # Uncomment if needed (large package)
+
+# ======================
+# Model Explainability
+# ======================
+shap>=0.40.0
+
+# ======================
+# Hyperparameter Optimization
+# ======================
+optuna>=3.0.0
+
+# ======================
+# Visualization
+# ======================
+seaborn>=0.11.0
+plotly>=5.0.0  # For interactive plots
+
+# ======================
+# Development Dependencies (optional)
+# ======================
+# pytest>=7.0.0
+# black>=22.0.0
+# mypy>=0.950
+
+# ======================
+# Note on Optional Dependencies
+# ======================
+# The system will work without advanced ML libraries.
+# If installation fails for any package, the system
+# will fall back to scikit-learn models automatically.

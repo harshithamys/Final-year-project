@@ -1,0 +1,6 @@
+name,category,description,cost_per_sqm_usd,timeline_months,cooling_impact_celsius,maintenance_annual_usd,co_benefits,priority,applicability_score,cost_effectiveness
+Cool Pavements (Reflective),pavement,Apply reflective coating or use light-colored materials for roads and parking.,35.0,2,1.8,3.0,"['Reduced lighting needs', 'Longer pavement life', 'Safety improvement']",CRITICAL,1.0,51.4286
+Permeable Pavements,pavement,"Install porous concrete, asphalt, or interlocking pavers.",75.0,4,2.0,5.0,"['Stormwater infiltration', 'Groundwater recharge', 'Flood reduction']",CRITICAL,1.0,26.6667
+Grass Pavers,pavement,Use grid pavers with grass for parking areas and low-traffic zones.,55.0,3,2.5,8.0,"['Natural appearance', 'Stormwater management', 'Habitat support']",CRITICAL,1.0,45.4545
+Cool Roofs (Reflective Coating),building,Apply high-albedo reflective coating to existing roofs.,25.0,1,1.5,1.5,"['Energy savings', 'Extended roof life', 'Quick implementation']",CRITICAL,0.72,60.0
+Cool Roofs (White Membrane),building,Install white thermoplastic or EPDM roofing membrane.,55.0,2,2.0,2.0,"['High durability', 'Energy savings', 'Waterproofing']",CRITICAL,0.72,36.3636
