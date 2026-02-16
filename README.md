@@ -15,6 +15,7 @@ A comprehensive Python-based system for analyzing Urban Heat Islands, detecting 
 7. [Usage](#7-usage)
 8. [API Reference](#8-api-reference)
 9. [Contributing](#9-contributing)
+10. [ML Models Roadmap & Plan](#10-ml-models-roadmap--plan)
 
 ---
 
@@ -52,8 +53,11 @@ This system addresses these challenges through data-driven analysis and actionab
 - **Blender Python**: Automated 3D scene generation script
 
 ### 🤖 Machine Learning
-- **Prediction Models**: Random Forest, Gradient Boosting, Ridge Regression
-- **Ensemble Model**: Weighted combination for robust predictions
+- **Basic Models**: Random Forest, Gradient Boosting, Ridge Regression
+- **Advanced Models**: XGBoost, LightGBM, CatBoost, Neural Networks (MLP)
+- **Ensemble Methods**: Stacking, Voting, Bagging ensembles
+- **AutoML**: Optuna-based hyperparameter optimization
+- **Explainability**: SHAP-based model interpretability
 - **Feature Importance**: Understanding UHI drivers
 
 ### ⚡ Safety Features
@@ -734,6 +738,115 @@ pip install -e ".[dev]"
 
 ---
 
+---
+
+## 10. ML Models Roadmap & Plan
+
+### 10.1 Current Model Suite
+
+#### Base Models (Implemented)
+- **Random Forest Regressor**: Ensemble of decision trees with bagging
+- **Gradient Boosting Regressor**: Sequential boosting for improved accuracy
+- **Ridge Regression**: L2-regularized linear regression
+- **Extra Trees Regressor**: Extremely randomized trees
+
+#### Advanced Models (Implemented)
+- **XGBoost**: Extreme gradient boosting with regularization (requires `xgboost` package)
+- **LightGBM**: Fast gradient boosting with leaf-wise growth (requires `lightgbm` package)
+- **CatBoost**: Handles categorical features natively (requires `catboost` package)
+- **Neural Network (MLP)**: Multi-layer perceptron with configurable architecture
+- **SVR**: Support Vector Regression with RBF kernel
+- **Bayesian Ridge**: Probabilistic linear regression
+- **Huber Regressor**: Robust regression for outliers
+
+#### Ensemble Methods (Implemented)
+- **Stacking Regressor**: Meta-learner combining RF, GB, Extra Trees, XGBoost, LightGBM
+- **Voting Regressor**: Weighted average of multiple models
+- **Custom Ensemble**: 60% Random Forest + 40% Gradient Boosting
+
+### 10.2 Model Optimization Features
+
+#### AutoML with Optuna
+```python
+from uhi_analysis.prediction import AutoMLUHI
+
+automl = AutoMLUHI(n_trials=50, timeout=300)
+results = automl.train(df, target_column='UHI_d')
+print(f"Best Model: {results['model_type']} with R² = {results['best_score']:.4f}")
+```
+
+#### SHAP Explainability
+```python
+from uhi_analysis.prediction import ModelExplainer
+
+explainer = ModelExplainer(model, X_train, feature_names)
+shap_importance = explainer.get_feature_importance_shap()
+interactions = explainer.get_feature_interactions(top_n=5)
+```
+
+### 10.3 Future ML Enhancements (Planned)
+
+#### Phase 1: Deep Learning Integration
+- [ ] **Temporal CNN**: For time-series UHI pattern recognition
+- [ ] **LSTM/GRU Networks**: Sequential modeling of diurnal UHI cycles
+- [ ] **Transformer Models**: Attention-based spatial feature extraction
+- [ ] **Graph Neural Networks**: Model urban spatial relationships
+
+#### Phase 2: Spatial-Temporal Models
+- [ ] **ConvLSTM**: Combined spatial-temporal UHI prediction
+- [ ] **ST-GCN**: Spatio-temporal graph convolutions
+- [ ] **U-Net Architecture**: Pixel-wise UHI intensity mapping
+
+#### Phase 3: Advanced Techniques
+- [ ] **Physics-Informed Neural Networks (PINNs)**: Incorporate thermodynamic constraints
+- [ ] **Transfer Learning**: Pre-trained models for different cities
+- [ ] **Federated Learning**: Privacy-preserving multi-city model training
+- [ ] **Uncertainty Quantification**: Bayesian deep learning for prediction confidence
+
+#### Phase 4: Real-Time & Edge Deployment
+- [ ] **Model Quantization**: INT8/FP16 for edge devices
+- [ ] **ONNX Export**: Cross-platform model deployment
+- [ ] **TensorRT Optimization**: GPU-accelerated inference
+- [ ] **Streaming Predictions**: Real-time UHI monitoring pipeline
+
+### 10.4 Model Performance Benchmarks
+
+#### Expected Performance Targets
+- **R² Score**: > 0.92 (current: ~0.91-0.93)
+- **RMSE**: < 0.005°C
+- **MAE**: < 0.004°C
+- **Inference Time**: < 10ms per prediction
+
+#### Model Comparison Usage
+```python
+from uhi_analysis.prediction import ModelComparison
+
+comparison = ModelComparison()
+results_df = comparison.compare_models(df, target_column='UHI_d')
+print(results_df)
+
+best_name, best_model = comparison.get_best_model()
+```
+
+### 10.5 Installation for Advanced Models
+
+```bash
+# Core ML dependencies
+pip install scikit-learn>=1.0.0
+
+# Advanced boosting libraries (optional)
+pip install xgboost lightgbm catboost
+
+# AutoML and explainability (optional)
+pip install optuna shap
+
+# Deep learning (future)
+pip install torch torchvision
+pip install tensorflow
+```
+
+---
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file.
@@ -748,6 +861,8 @@ MIT License - see [LICENSE](LICENSE) file.
 - Dataset: UHI simulation data (NZFL)
 - Three.js community
 - scikit-learn maintainers
+- XGBoost, LightGBM, CatBoost teams
+- Optuna and SHAP developers
 
 ---
 
