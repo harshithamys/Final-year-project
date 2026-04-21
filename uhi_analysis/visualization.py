@@ -1209,9 +1209,9 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
             uhi_min = min(uhi_values) if uhi_values else 0
             uhi_max = max(uhi_values) if uhi_values else 1
             
-            # Generate HTML
+            # Generate HTML (use default=str to handle bool/numpy types)
             html_content = self.HTML_TEMPLATE_ENHANCED.format(
-                urban_data_json=json.dumps(urban_data),
+                urban_data_json=json.dumps(urban_data, default=str),
                 building_count=building_count,
                 tree_count=tree_count,
                 hotspot_count=hotspot_count,

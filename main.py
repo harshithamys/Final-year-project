@@ -189,8 +189,11 @@ def demonstrate_prediction_model(df_day: pd.DataFrame, df_night: pd.DataFrame):
     
     # Feature importance
     print("\nTop 5 Important Features:")
-    for i, (feature, importance) in enumerate(list(model.feature_importance.items())[:5], 1):
-        print(f"  {i}. {feature}: {importance:.4f}")
+    if model.feature_importance:
+        for i, (feature, importance) in enumerate(list(model.feature_importance.items())[:5], 1):
+            print(f"  {i}. {feature}: {importance:.4f}")
+    else:
+        print("  (not available — model training may have failed)")
     
     # Train ensemble model
     print("\n\nTraining Ensemble Model...")
