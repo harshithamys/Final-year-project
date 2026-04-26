@@ -342,13 +342,13 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         </div>
     </div>
 
-    <div id="mitigationPanel" style="position: absolute; right: 20px; top: 300px; background: rgba(0,0,0,0.85); color: white; padding: 20px; border-radius: 12px; width: 320px; max-height: 400px; overflow-y: auto; z-index: 100; display: none; border: 1px solid #4ecdc4;">
+    <div id="mitigationPanel" style="position: absolute; left: 10px; top: 350px; background: rgba(0,0,0,0.85); color: white; padding: 20px; border-radius: 12px; width: 320px; max-height: 300px; overflow-y: auto; z-index: 100; display: none; border: 1px solid #4ecdc4;">
         <h3 style="color: #ff6b6b; margin-bottom: 12px;">📋 Mitigation Strategies</h3>
         <div id="strategiesList"></div>
         <button class="btn-secondary" style="margin-top: 15px; width: 100%;" onclick="document.getElementById('mitigationPanel').style.display='none';">Close</button>
     </div>
 
-    <div id="tempReduction" style="position: absolute; bottom: 150px; right: 20px; background: rgba(0,0,0,0.85); color: white; padding: 15px; border-radius: 12px; z-index: 100; display: none; border: 1px solid #4ecdc4; font-size: 13px;">
+    <div id="tempReduction" style="position: absolute; left: 50%; bottom: 240px; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: white; padding: 15px; border-radius: 12px; z-index: 100; display: none; border: 1px solid #4ecdc4; font-size: 13px; white-space: nowrap;">
         <h4 style="color: #4ecdc4; margin-bottom: 8px;">✓ Mitigation Active</h4>
         <div id="tempStats"></div>
     </div>
@@ -780,7 +780,7 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
             mitigationGroup.visible = !mitigationGroup.visible;
 
             if (mitigationGroup.visible) {{
-                // MITIGATION ON: Reduce heat, cool colors
+                // MITIGATION ON: Reduce heat, cool colors, shrink hotspots
                 btn.classList.add('active');
 
                 // Cool down buildings (maintain definition)
@@ -794,16 +794,20 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                     }}
                 }});
 
-                // Cool down hotspots: reduce glow and change to cool colors
-                hotspotGroup.children.forEach(child => {{
-                    if (child.userData.phase !== undefined && child.material) {{
-                        child.userData.originalOpacity = child.material.opacity;
+                // Cool down hotspots: reduce radius, glow, and change to cool colors
+                hotspotHalos.forEach(halo => {{
+                    if (halo.userData.phase !== undefined && halo.material) {{
+                        // Scale down hotspot radius to 50%
+                        halo.userData.originalScale = halo.scale.x || 1.0;
+                        halo.scale.set(0.5, 0.5, 0.5);
+
+                        halo.userData.originalOpacity = halo.material.opacity;
                         // Reduce opacity by 60% for cooling effect
-                        child.material.opacity *= 0.4;
+                        halo.material.opacity *= 0.4;
                         // Change color to cool blue-cyan
-                        if (child.material.color) {{
-                            child.userData.originalColor = child.material.color.clone();
-                            child.material.color.copy(new THREE.Color(0x00ccff));
+                        if (halo.material.color) {{
+                            halo.userData.originalColor = halo.material.color.clone();
+                            halo.material.color.copy(new THREE.Color(0x00ccff));
                         }}
                     }}
                 }});
@@ -829,11 +833,15 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                     }}
                 }});
 
-                hotspotGroup.children.forEach(child => {{
-                    if (child.userData.originalOpacity) {{
-                        child.material.opacity = child.userData.originalOpacity;
-                        if (child.userData.originalColor) {{
-                            child.material.color.copy(child.userData.originalColor);
+                // Restore hotspot sizes, opacity, and colors
+                hotspotHalos.forEach(halo => {{
+                    // Restore original radius
+                    halo.scale.set(halo.userData.originalScale, halo.userData.originalScale, halo.userData.originalScale);
+
+                    if (halo.userData.originalOpacity) {{
+                        halo.material.opacity = halo.userData.originalOpacity;
+                        if (halo.userData.originalColor) {{
+                            halo.material.color.copy(halo.userData.originalColor);
                         }}
                     }}
                 }});
@@ -846,6 +854,9 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 }});
             }}
         }}
+
+        // Track hotspot halos and rings for scaling on mitigation toggle
+        const hotspotHalos = [];
 
         // Create hotspot zones with ground halos and pulsing glow rings
         function createHotspots() {{
@@ -870,8 +881,9 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 const halo = new THREE.Mesh(haloGeometry, haloMaterial);
                 halo.rotation.x = -Math.PI / 2;
                 halo.position.set(centerX, 0.05, centerY);
-                halo.userData = {{ type: 'hotspot', id: zone.id, intensity, phase: idx * 0.78 }};
+                halo.userData = {{ type: 'hotspot', id: zone.id, intensity, phase: idx * 0.78, originalScale: 1.0 }};
                 hotspotGroup.add(halo);
+                hotspotHalos.push(halo);
                 interactiveObjects.push(halo);
 
                 // Pulsing glow ring (animated opacity)
@@ -885,8 +897,9 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 const ring = new THREE.Mesh(ringGeometry, ringMaterial);
                 ring.rotation.x = -Math.PI / 2;
                 ring.position.set(centerX, 0.06, centerY);
-                ring.userData = {{ phase: idx * 0.78 }};
+                ring.userData = {{ phase: idx * 0.78, originalScale: 1.0 }};
                 hotspotGroup.add(ring);
+                hotspotHalos.push(ring);
 
                 // Point light at hotspot center for ambient glow
                 const light = new THREE.PointLight(0xff4400, intensity * 2, radius * 1.5);
