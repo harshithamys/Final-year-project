@@ -721,25 +721,7 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 const centerX = zone.center?.x || idx * 30;
                 const centerY = zone.center?.y || idx * 30;
 
-                // 1 single large wind arrow pointing optimal heat flow direction (north)
-                const angle = Math.PI / 2; // North direction
-                const ox = centerX + Math.cos(angle) * radius * 1.3;
-                const oz = centerY + Math.sin(angle) * radius * 1.3;
-
-                // Arrow points toward hotspot center (where cooling happens)
-                const dir = new THREE.Vector3(
-                    centerX - ox, 0, centerY - oz
-                ).normalize();
-
-                // Single large arrow: length 30, headLength 10, headWidth 6
-                const arrow = new THREE.ArrowHelper(
-                    dir, new THREE.Vector3(ox, 7, oz),
-                    30, 0x00ccff, 10, 6
-                );
-                arrow.userData = {{ zone_id: idx }};
-                mitigationGroup.add(arrow);
-
-                // Canopy spread rings for trees near hotspot
+                // Canopy spread rings for trees near hotspot (shows tree cooling zones)
                 if (urbanData.trees) {{
                     urbanData.trees.forEach((tree) => {{
                         const tx = tree.position?.x || 0;
