@@ -331,9 +331,16 @@ class UrbanLandscapeGenerator:
                 x = (row[lon_col] - hotspot_df[lon_col].min()) * scale_factor * 100
                 y = (row[lat_col] - hotspot_df[lat_col].min()) * scale_factor * 100
             else:
-                x = (idx % 10) * (terrain_size[0] / 10) + random.uniform(-5, 5)
-                y = (idx // 10) * (terrain_size[1] / 10) + random.uniform(-5, 5)
-            
+                # Place hotspots with 50% in middle area, 50% distributed across landscape
+                if idx / len(hotspot_df) < 0.5:
+                    # Middle hotspots (40% to 60% of terrain in each direction)
+                    x = random.uniform(terrain_size[0] * 0.35, terrain_size[0] * 0.65)
+                    y = random.uniform(terrain_size[1] * 0.35, terrain_size[1] * 0.65)
+                else:
+                    # Edge/distributed hotspots
+                    x = (idx % 10) * (terrain_size[0] / 10) + random.uniform(-5, 5)
+                    y = (idx // 10) * (terrain_size[1] / 10) + random.uniform(-5, 5)
+
             # Normalize to terrain
             x = min(max(x, 0), terrain_size[0])
             y = min(max(y, 0), terrain_size[1])
@@ -531,9 +538,27 @@ class UrbanLandscapeGenerator:
         tree_id = 0
         zones = self.landscape.hotspot_zones
 
+        # Find building_0018 for tree planting
+        building_0018 = None
+        for b in self.landscape.buildings:
+            if b.id == 'building_0018':
+                building_0018 = b
+                break
+
         for i in range(n_trees):
-            # 60% of trees placed near hotspot zones, 40% random
-            if zones and i / n_trees < 0.6:
+            # 30% around building_0018, 30% near hotspot zones, 40% random
+            if building_0018 and i / n_trees < 0.3:
+                # Plant trees around building_0018
+                angle = random.uniform(0, 2 * math.pi)
+                dist = random.uniform(building_0018.width * 1.2, building_0018.width * 4)
+                x = building_0018.x + math.cos(angle) * dist
+                y = building_0018.y + math.sin(angle) * dist
+
+                # Clamp to terrain bounds
+                x = max(2, min(x, terrain_size[0] - 2))
+                y = max(2, min(y, terrain_size[1] - 2))
+                near_hotspot = True
+            elif zones and i / n_trees < 0.6:
                 zone = random.choice(zones)
                 angle = random.uniform(0, 2 * math.pi)
                 dist = random.uniform(zone.radius * 0.3, zone.radius * 1.4)
