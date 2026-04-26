@@ -45,6 +45,7 @@ from uhi_analysis.prediction import (
     AdvancedUHIModel, StackingUHIModel, ModelComparison, AutoMLUHI
 )
 from uhi_analysis.urban_generator import UrbanLandscapeGenerator
+from uhi_analysis.enhanced_visualization_v2 import generate_advanced_html
 
 
 def print_header(title: str):
@@ -302,7 +303,7 @@ def demonstrate_urban_landscape(df: pd.DataFrame, hotspot_result):
     # Generate enhanced visualization
     print("\nGenerating enhanced AR/VR visualization...")
     viz_manager = VisualizationManager()
-    
+
     output_paths = viz_manager.generate_urban_landscape(
         df=df,
         hotspot_df=hotspot_df,
@@ -310,15 +311,33 @@ def demonstrate_urban_landscape(df: pd.DataFrame, hotspot_result):
         prefix='uhi_city',
         terrain_size=(200, 200)
     )
-    
+
     print(f"\nGenerated Enhanced Visualization Files:")
     for format_name, path in output_paths.items():
         print(f"  ✓ {format_name}: {path}")
-    
+
+    # Generate advanced visualization with mitigation strategies
+    print("\nGenerating advanced visualization with mitigation strategies...")
+    try:
+        landscape_data = {
+            'buildings': [b.to_dict() for b in landscape.buildings],
+            'trees': [t.to_dict() for t in landscape.trees],
+            'roads': [r.to_dict() for r in landscape.roads],
+            'hotspot_zones': [z.to_dict() for z in landscape.hotspot_zones]
+        }
+        advanced_html_path = generate_advanced_html(
+            landscape_data,
+            output_path='output/urban_visualization/uhi_advanced_visualization.html'
+        )
+        print(f"  ✓ Advanced visualization: {advanced_html_path}")
+        output_paths['advanced_html'] = advanced_html_path
+    except Exception as e:
+        print(f"  ⚠ Advanced visualization generation skipped: {e}")
+
     print("\n🎮 Open the HTML file in a browser for immersive 3D visualization")
     print("🥽 VR mode available on compatible devices")
     print("🌙 Toggle day/night mode for different viewing experiences")
-    
+
     return landscape, output_paths
 
 

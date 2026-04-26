@@ -334,10 +334,22 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         <button class="btn-secondary" id="toggleBuildings">🏢 Toggle Buildings</button>
         <button class="btn-secondary" id="toggleTrees">🌳 Toggle Trees</button>
         <button class="btn-secondary" id="toggleHeatmap">🔥 Toggle Heatmap</button>
+        <button class="btn-primary" id="toggleMitigation">🌱 Toggle Mitigation</button>
         <div class="toggle-label">
             <span>Day/Night</span>
             <div class="toggle-switch" id="dayNightToggle"></div>
         </div>
+    </div>
+
+    <div id="mitigationPanel" style="position: absolute; right: 20px; top: 300px; background: rgba(0,0,0,0.85); color: white; padding: 20px; border-radius: 12px; width: 320px; max-height: 400px; overflow-y: auto; z-index: 100; display: none; border: 1px solid #4ecdc4;">
+        <h3 style="color: #ff6b6b; margin-bottom: 12px;">📋 Mitigation Strategies</h3>
+        <div id="strategiesList"></div>
+        <button class="btn-secondary" style="margin-top: 15px; width: 100%;" onclick="document.getElementById('mitigationPanel').style.display='none';">Close</button>
+    </div>
+
+    <div id="tempReduction" style="position: absolute; bottom: 150px; right: 20px; background: rgba(0,0,0,0.85); color: white; padding: 15px; border-radius: 12px; z-index: 100; display: none; border: 1px solid #4ecdc4; font-size: 13px;">
+        <h4 style="color: #4ecdc4; margin-bottom: 8px;">✓ Mitigation Active</h4>
+        <div id="tempStats"></div>
     </div>
     
     <div id="legend">
@@ -458,21 +470,20 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 // Building body
                 const geometry = new THREE.BoxGeometry(width, height, depth);
                 
-                // Color based on heat exposure
+                // Color based on heat exposure with smooth lerp
                 const heatExposure = building.heat_exposure || 0;
-                let color;
-                if (heatExposure > 0.6) {{
-                    color = new THREE.Color(0.9, 0.3 + (1-heatExposure)*0.4, 0.3);
-                }} else {{
-                    color = new THREE.Color(
-                        building.color?.r || 0.7,
-                        building.color?.g || 0.7,
-                        building.color?.b || 0.7
-                    );
-                }}
-                
+                const baseColor = new THREE.Color(
+                    building.color?.r || 0.7,
+                    building.color?.g || 0.7,
+                    building.color?.b || 0.7
+                );
+                const hotColor = new THREE.Color(1.0, 0.2, 0.0);
+                const color = baseColor.clone().lerp(hotColor, heatExposure);
+
                 const material = new THREE.MeshStandardMaterial({{
                     color: color,
+                    emissive: color.clone(),
+                    emissiveIntensity: 0.1 + heatExposure * 0.5,
                     roughness: 0.7,
                     metalness: 0.1
                 }});
@@ -630,77 +641,135 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 roadGroup.add(roadMesh);
             }});
         }}
-        
-        // Create hotspot zones
-        function createHotspots() {{
+
+        // Create mitigation visualizations (wind arrows + canopy spreads)
+        const mitigationGroup = new THREE.Group();
+        function createMitigation() {{
             if (!urbanData.hotspot_zones) return;
-            
+
             urbanData.hotspot_zones.forEach((zone, idx) => {{
                 const intensity = zone.intensity || 0.5;
                 const radius = zone.radius || 20;
-                const height = intensity * 50 + 5;
-                
-                // Hotspot pillar
-                const pillarGeometry = new THREE.CylinderGeometry(
-                    2, 3, height, 16
-                );
-                const color = new THREE.Color(
-                    zone.color?.r || 1,
-                    zone.color?.g || 0,
-                    zone.color?.b || 0
-                );
-                const pillarMaterial = new THREE.MeshStandardMaterial({{
-                    color: color,
-                    emissive: color,
-                    emissiveIntensity: 0.4,
-                    transparent: true,
-                    opacity: 0.9
-                }});
-                
-                const pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
-                pillar.position.set(
-                    zone.center?.x || idx * 30,
-                    height / 2,
-                    zone.center?.y || idx * 30
-                );
-                pillar.castShadow = true;
-                pillar.userData = {{
-                    type: 'hotspot',
-                    id: zone.id,
-                    intensity: intensity,
-                    uhi_value: zone.uhi_value
-                }};
-                hotspotGroup.add(pillar);
-                interactiveObjects.push(pillar);
-                
-                // Ground heat indicator (circle)
-                const circleGeometry = new THREE.CircleGeometry(radius, 32);
-                const circleMaterial = new THREE.MeshBasicMaterial({{
-                    color: color,
-                    transparent: true,
-                    opacity: 0.3
-                }});
-                const circle = new THREE.Mesh(circleGeometry, circleMaterial);
-                circle.rotation.x = -Math.PI / 2;
-                circle.position.set(
-                    zone.center?.x || idx * 30,
-                    0.1,
-                    zone.center?.y || idx * 30
-                );
-                hotspotGroup.add(circle);
-                
-                // Glow effect for high intensity
-                if (intensity > 0.6) {{
-                    const glowGeometry = new THREE.CylinderGeometry(4, 5, height * 0.8, 16);
-                    const glowMaterial = new THREE.MeshBasicMaterial({{
-                        color: color,
-                        transparent: true,
-                        opacity: 0.15
-                    }});
-                    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-                    glow.position.copy(pillar.position);
-                    hotspotGroup.add(glow);
+                const centerX = zone.center?.x || idx * 30;
+                const centerY = zone.center?.y || idx * 30;
+
+                // 8 wind arrows radiating inward around hotspot
+                for (let a = 0; a < 8; a++) {{
+                    const angle = (a / 8) * Math.PI * 2;
+                    const ox = centerX + Math.cos(angle) * radius * 0.9;
+                    const oz = centerY + Math.sin(angle) * radius * 0.9;
+
+                    const dir = new THREE.Vector3(
+                        centerX - ox, 0, centerY - oz
+                    ).normalize();
+
+                    const arrow = new THREE.ArrowHelper(
+                        dir, new THREE.Vector3(ox, 8, oz),
+                        10, 0x88ccff, 2, 1.2
+                    );
+                    arrow.userData = {{ phase: a * 0.78 }};
+                    mitigationGroup.add(arrow);
                 }}
+
+                // Canopy spread rings for trees near hotspot
+                if (urbanData.trees) {{
+                    urbanData.trees.forEach((tree) => {{
+                        const tx = tree.position?.x || 0;
+                        const ty = tree.position?.y || 0;
+                        const dist = Math.hypot(tx - centerX, ty - centerY);
+                        if (dist < radius * 1.4 && dist > radius * 0.3) {{
+                            const canopyR = tree.canopy_radius || 3;
+                            const spreadGeo = new THREE.RingGeometry(canopyR, canopyR * 1.8, 32);
+                            const spreadMat = new THREE.MeshBasicMaterial({{
+                                color: 0x44aa44, transparent: true, opacity: 0.18,
+                                side: THREE.DoubleSide
+                            }});
+                            const spread = new THREE.Mesh(spreadGeo, spreadMat);
+                            spread.rotation.x = -Math.PI / 2;
+                            spread.position.set(tx, 0.15, ty);
+                            mitigationGroup.add(spread);
+
+                            // Elevated shade disk
+                            const shadeDisk = new THREE.CircleGeometry(canopyR * 1.4, 32);
+                            const shadeMat = new THREE.MeshBasicMaterial({{
+                                color: 0x228833, transparent: true, opacity: 0.12
+                            }});
+                            const shade = new THREE.Mesh(shadeDisk, shadeMat);
+                            shade.rotation.x = -Math.PI / 2;
+                            shade.position.set(tx, tree.height || 8, ty);
+                            mitigationGroup.add(shade);
+                        }}
+                    }});
+                }}
+            }});
+
+            scene.add(mitigationGroup);
+            mitigationGroup.visible = false;
+        }}
+
+        function toggleMitigation() {{
+            mitigationGroup.visible = !mitigationGroup.visible;
+            if (mitigationGroup.visible) {{
+                buildingGroup.children.forEach(b => {{
+                    if (b.material.emissiveIntensity) {{
+                        b.userData.originalIntensity = b.material.emissiveIntensity;
+                        b.material.emissiveIntensity -= 0.2;
+                    }}
+                }});
+            }} else {{
+                buildingGroup.children.forEach(b => {{
+                    if (b.userData.originalIntensity) {{
+                        b.material.emissiveIntensity = b.userData.originalIntensity;
+                    }}
+                }});
+            }}
+        }}
+
+        // Create hotspot zones with ground halos and pulsing glow rings
+        function createHotspots() {{
+            if (!urbanData.hotspot_zones) return;
+
+            urbanData.hotspot_zones.forEach((zone, idx) => {{
+                const intensity = zone.intensity || 0.5;
+                const radius = zone.radius || 20;
+                const centerX = zone.center?.x || idx * 30;
+                const centerY = zone.center?.y || idx * 30;
+
+                const color = new THREE.Color(1.0, 0.267, 0.0);
+
+                // Ground-level heat halo (filled circle on ground)
+                const haloGeometry = new THREE.CircleGeometry(radius, 64);
+                const haloMaterial = new THREE.MeshBasicMaterial({{
+                    color: color,
+                    transparent: true,
+                    opacity: 0.4,
+                    side: THREE.DoubleSide
+                }});
+                const halo = new THREE.Mesh(haloGeometry, haloMaterial);
+                halo.rotation.x = -Math.PI / 2;
+                halo.position.set(centerX, 0.05, centerY);
+                halo.userData = {{ type: 'hotspot', id: zone.id, intensity, phase: idx * 0.78 }};
+                hotspotGroup.add(halo);
+                interactiveObjects.push(halo);
+
+                // Pulsing glow ring (animated opacity)
+                const ringGeometry = new THREE.RingGeometry(radius * 0.8, radius, 32);
+                const ringMaterial = new THREE.MeshBasicMaterial({{
+                    color: color,
+                    transparent: true,
+                    opacity: 0.3,
+                    side: THREE.DoubleSide
+                }});
+                const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+                ring.rotation.x = -Math.PI / 2;
+                ring.position.set(centerX, 0.06, centerY);
+                ring.userData = {{ phase: idx * 0.78 }};
+                hotspotGroup.add(ring);
+
+                // Point light at hotspot center for ambient glow
+                const light = new THREE.PointLight(0xff4400, intensity * 2, radius * 1.5);
+                light.position.set(centerX, 3, centerY);
+                hotspotGroup.add(light);
             }});
         }}
         
@@ -709,6 +778,7 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         createBuildings();
         createTrees();
         createHotspots();
+        createMitigation();
         
         // Raycaster for interaction
         const raycaster = new THREE.Raycaster();
@@ -759,7 +829,52 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         }}
         
         window.addEventListener('mousemove', onMouseMove);
-        
+
+        // Click handler for building mitigation panel
+        window.addEventListener('click', (event) => {{
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactiveObjects);
+
+            if (intersects.length > 0) {{
+                const obj = intersects[0].object;
+                const data = obj.userData;
+
+                if (data.type === 'building') {{
+                    showMitigationPanel(data);
+                }}
+            }}
+        }});
+
+        function showMitigationPanel(buildingData) {{
+            const strategies = [
+                {{ name: 'Street Tree Planting', cooling: 2.5, cost: 45, timeline: 6 }},
+                {{ name: 'Urban Parks & Green Spaces', cooling: 3.5, cost: 85, timeline: 18 }},
+                {{ name: 'Green Roofs (Extensive)', cooling: 1.8, cost: 120, timeline: 4 }},
+                {{ name: 'Cool Pavements', cooling: 1.5, cost: 35, timeline: 3 }}
+            ];
+
+            let html = `<div style="margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid #333;">
+                <strong style="color: #4ecdc4;">Building Info</strong><br>
+                <span style="font-size: 12px; color: #aaa;">Heat Exposure: ${{(buildingData.heatExposure * 100).toFixed(1)}}%</span><br>
+                <span style="font-size: 12px; color: #aaa;">Est. Temp: ${{(28 + buildingData.heatExposure * 10).toFixed(1)}}°C</span>
+            </div>`;
+
+            html += '<strong style="color: #4ecdc4; display: block; margin-bottom: 10px;">Recommended Strategies</strong>';
+            strategies.forEach(s => {{
+                html += `<div style="background: rgba(78, 205, 196, 0.1); padding: 10px; margin: 8px 0; border-left: 3px solid #4ecdc4; border-radius: 4px; font-size: 12px;">
+                    <div style="font-weight: bold; color: #4ecdc4;">${{s.name}}</div>
+                    <div style="color: #ff6b6b; margin-top: 4px;">Cooling: −${{s.cooling}}°C</div>
+                    <div style="color: #aaa; font-size: 11px;">Cost: $${{s.cost}}/m² | Timeline: ${{s.timeline}} months</div>
+                </div>`;
+            }});
+
+            document.getElementById('strategiesList').innerHTML = html;
+            document.getElementById('mitigationPanel').style.display = 'block';
+        }}
+
         // UI Controls
         document.getElementById('resetCamera').onclick = () => {{
             camera.position.set(150, 120, 150);
@@ -777,7 +892,31 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         document.getElementById('toggleHeatmap').onclick = () => {{
             hotspotGroup.visible = !hotspotGroup.visible;
         }};
-        
+
+        document.getElementById('toggleMitigation').onclick = () => {{
+            toggleMitigation();
+            document.getElementById('tempReduction').style.display = mitigationGroup.visible ? 'block' : 'none';
+            if (mitigationGroup.visible) {{
+                updateTempStats();
+            }}
+        }};
+
+        function updateTempStats() {{
+            const strategies = [
+                {{ name: 'Street Tree Planting', cooling: 2.5 }},
+                {{ name: 'Urban Parks', cooling: 3.5 }},
+                {{ name: 'Green Roofs', cooling: 1.8 }},
+                {{ name: 'Cool Pavements', cooling: 1.5 }}
+            ];
+            const totalCooling = strategies.reduce((sum, s) => sum + s.cooling, 0);
+            let html = '';
+            strategies.forEach(s => {{
+                html += `<div style="display: flex; justify-content: space-between; margin: 6px 0;"><span>${{s.name}}:</span><span style="color: #ff6b6b;">−${{s.cooling}}°C</span></div>`;
+            }});
+            html += `<div style="border-top: 1px solid #333; margin: 8px 0; padding-top: 8px; font-weight: bold;">Estimated Total: −${{totalCooling.toFixed(1)}}°C</div>`;
+            document.getElementById('tempStats').innerHTML = html;
+        }}
+
         document.getElementById('dayNightToggle').onclick = function() {{
             this.classList.toggle('active');
             isNightMode = !isNightMode;
@@ -839,22 +978,23 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         function animate(time) {{
             requestAnimationFrame(animate);
             controls.update();
-            
-            // Animate hotspot pillars
-            const t = time * 0.001;
-            hotspotGroup.children.forEach((child, i) => {{
-                if (child.userData.type === 'hotspot') {{
-                    child.material.emissiveIntensity = 0.3 + Math.sin(t * 2 + i) * 0.1;
+
+            // Animate hotspot glow rings and halos
+            const t = time * 0.003;
+            hotspotGroup.children.forEach((child) => {{
+                if (child.userData.phase !== undefined && child.material.opacity !== undefined) {{
+                    // Pulsing glow effect: 0.2 to 0.45 opacity
+                    child.material.opacity = 0.2 + 0.25 * Math.sin(t + child.userData.phase);
                 }}
             }});
-            
+
             // Update stats
             if (time - lastTime > 500) {{
                 const fps = Math.round(1000 / (time - lastTime) * 2);
                 statsDiv.innerHTML = `FPS: ~${{fps}}<br>Objects: ${{scene.children.length}}`;
                 lastTime = time;
             }}
-            
+
             renderer.render(scene, camera);
         }}
         

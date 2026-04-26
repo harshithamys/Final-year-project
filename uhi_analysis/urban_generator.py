@@ -519,32 +519,47 @@ class UrbanLandscapeGenerator:
             building_id += 1
     
     def _generate_vegetation(self, params: Dict[str, float], terrain_size: Tuple[float, float]):
-        """Generate trees and vegetation."""
+        """Generate trees and vegetation with optimal placement near hotspots."""
         tree_density = params.get('tree_density', 0.1)
         green_ratio = params.get('green_ratio', 0.3)
         park_ratio = params.get('park_grass_ratio', 0.1)
-        
+
         # Number of trees based on density
         n_trees = int((tree_density + green_ratio * 0.5) * terrain_size[0] * terrain_size[1] / 50)
         n_trees = max(10, min(n_trees, 300))
-        
+
         tree_id = 0
-        
-        for _ in range(n_trees):
-            x = random.uniform(2, terrain_size[0] - 2)
-            y = random.uniform(2, terrain_size[1] - 2)
-            
+        zones = self.landscape.hotspot_zones
+
+        for i in range(n_trees):
+            # 60% of trees placed near hotspot zones, 40% random
+            if zones and i / n_trees < 0.6:
+                zone = random.choice(zones)
+                angle = random.uniform(0, 2 * math.pi)
+                dist = random.uniform(zone.radius * 0.3, zone.radius * 1.4)
+                x = zone.center_x + math.cos(angle) * dist
+                y = zone.center_y + math.sin(angle) * dist
+
+                # Clamp to terrain bounds
+                x = max(2, min(x, terrain_size[0] - 2))
+                y = max(2, min(y, terrain_size[1] - 2))
+                near_hotspot = True
+            else:
+                x = random.uniform(2, terrain_size[0] - 2)
+                y = random.uniform(2, terrain_size[1] - 2)
+                near_hotspot = False
+
             # Check if position conflicts with buildings
             conflict = False
             for building in self.landscape.buildings:
-                if (abs(x - building.x) < building.width/2 + 2 and 
+                if (abs(x - building.x) < building.width/2 + 2 and
                     abs(y - building.y) < building.depth/2 + 2):
                     conflict = True
                     break
-            
+
             if conflict:
                 continue
-            
+
             # Tree type based on location
             if random.random() < park_ratio:
                 veg_type = VegetationType.TREE_DECIDUOUS
@@ -562,11 +577,14 @@ class UrbanLandscapeGenerator:
                 else:
                     height = random.uniform(5, 12)
                     canopy = random.uniform(2, 5)
-            
+
             # Color variation
             green_var = random.uniform(-0.1, 0.1)
             color = (0.15 + green_var, 0.5 + green_var, 0.15 + green_var)
-            
+
+            # Trees near hotspots have higher cooling effect
+            cooling = (0.5 + random.random() * 0.3) if near_hotspot else (0.3 + random.random() * 0.4)
+
             tree = Tree(
                 id=f"tree_{tree_id:04d}",
                 x=x,
@@ -577,9 +595,9 @@ class UrbanLandscapeGenerator:
                 trunk_radius=height * 0.05,
                 vegetation_type=veg_type,
                 color=color,
-                cooling_effect=0.3 + random.random() * 0.4
+                cooling_effect=cooling
             )
-            
+
             self.landscape.trees.append(tree)
             tree_id += 1
     
