@@ -528,33 +528,99 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         }}
         
         function addWindowsToBuilding(building, width, height, depth, density) {{
-            const windowGeometry = new THREE.PlaneGeometry(1.5, 2);
+            const windowGeometry = new THREE.PlaneGeometry(1.2, 1.5);
             const windowMaterial = new THREE.MeshStandardMaterial({{
                 color: 0x88ccff,
                 emissive: 0x88ccff,
-                emissiveIntensity: 0.1,
-                metalness: 0.8,
-                roughness: 0.2
+                emissiveIntensity: 0.2,
+                metalness: 0.9,
+                roughness: 0.1
             }});
-            
+
+            const doorGeometry = new THREE.PlaneGeometry(1.0, 2.5);
+            const doorMaterial = new THREE.MeshStandardMaterial({{
+                color: 0x663300,
+                metalness: 0.3,
+                roughness: 0.7
+            }});
+
             const floors = Math.floor(height / 4);
             const windowsPerFloor = Math.floor(width / 3 * density);
-            
+            const windowsPerDepth = Math.floor(depth / 3 * density);
+
+            // Windows on all 4 faces
             for (let floor = 0; floor < floors; floor++) {{
+                const yOffset = floor * 4 + 2.5;
+
+                // Front face (X-axis windows)
                 for (let w = 0; w < windowsPerFloor; w++) {{
                     const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
-                    const xOffset = (w - windowsPerFloor/2) * 3 + 1.5;
-                    const yOffset = floor * 4 + 3;
-                    
-                    // Front face
+                    const xOffset = (w - windowsPerFloor/2) * 3;
                     windowMesh.position.set(
                         building.position.x + xOffset,
                         yOffset,
-                        building.position.z + depth/2 + 0.01
+                        building.position.z + depth/2 + 0.05
+                    );
+                    buildingGroup.add(windowMesh);
+                }}
+
+                // Back face
+                for (let w = 0; w < windowsPerFloor; w++) {{
+                    const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                    windowMesh.rotation.y = Math.PI;
+                    const xOffset = (w - windowsPerFloor/2) * 3;
+                    windowMesh.position.set(
+                        building.position.x + xOffset,
+                        yOffset,
+                        building.position.z - depth/2 - 0.05
+                    );
+                    buildingGroup.add(windowMesh);
+                }}
+
+                // Left face (Z-axis windows)
+                for (let d = 0; d < windowsPerDepth; d++) {{
+                    const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                    windowMesh.rotation.y = Math.PI / 2;
+                    const zOffset = (d - windowsPerDepth/2) * 3;
+                    windowMesh.position.set(
+                        building.position.x - width/2 - 0.05,
+                        yOffset,
+                        building.position.z + zOffset
+                    );
+                    buildingGroup.add(windowMesh);
+                }}
+
+                // Right face
+                for (let d = 0; d < windowsPerDepth; d++) {{
+                    const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                    windowMesh.rotation.y = -Math.PI / 2;
+                    const zOffset = (d - windowsPerDepth/2) * 3;
+                    windowMesh.position.set(
+                        building.position.x + width/2 + 0.05,
+                        yOffset,
+                        building.position.z + zOffset
                     );
                     buildingGroup.add(windowMesh);
                 }}
             }}
+
+            // Doors at ground level (front and back)
+            const doorMesh1 = new THREE.Mesh(doorGeometry, doorMaterial);
+            doorMesh1.position.set(
+                building.position.x,
+                1.2,
+                building.position.z + depth/2 + 0.05
+            );
+            buildingGroup.add(doorMesh1);
+
+            const doorMesh2 = new THREE.Mesh(doorGeometry, doorMaterial);
+            doorMesh2.rotation.y = Math.PI;
+            doorMesh2.position.set(
+                building.position.x,
+                1.2,
+                building.position.z - depth/2 - 0.05
+            );
+            buildingGroup.add(doorMesh2);
         }}
         
         // Create trees
@@ -713,14 +779,14 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
             if (mitigationGroup.visible) {{
                 // MITIGATION ON: Reduce heat, cool colors
 
-                // Cool down buildings
+                // Cool down buildings (maintain definition)
                 buildingGroup.children.forEach(b => {{
                     if (b.material.emissiveIntensity) {{
                         b.userData.originalIntensity = b.material.emissiveIntensity;
                         b.userData.originalColor = b.material.color.clone();
-                        b.material.emissiveIntensity -= 0.2;
-                        // Shift color toward cooler blue tones
-                        b.material.color.lerp(new THREE.Color(0x4ecdc4), 0.15);
+                        b.material.emissiveIntensity -= 0.15;
+                        // Slight color shift to maintain building definition
+                        b.material.color.lerp(new THREE.Color(0x6ebdd4), 0.08);
                     }}
                 }});
 
