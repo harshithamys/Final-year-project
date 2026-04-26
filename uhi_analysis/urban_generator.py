@@ -346,19 +346,21 @@ class UrbanLandscapeGenerator:
 
             hotspot_count += 1
 
-            # Normalize to terrain
-            x = min(max(x, 0), terrain_size[0])
-            y = min(max(y, 0), terrain_size[1])
-            
             uhi_value = row[uhi_col]
             intensity = (uhi_value - uhi_min) / uhi_range
-            
+
             # Color based on intensity
             color = self._heat_to_color(intensity)
-            
+
             # Radius based on intensity
             radius = 10 + intensity * 30
-            
+
+            # Normalize to terrain with margin for radius
+            # Ensure hotspot center + radius stays within bounds
+            margin = radius + 2  # Add small buffer
+            x = min(max(x, margin), terrain_size[0] - margin)
+            y = min(max(y, margin), terrain_size[1] - margin)
+
             zone = HotspotZone(
                 id=f"hotspot_{idx:04d}",
                 center_x=x,
