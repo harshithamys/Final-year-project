@@ -247,6 +247,7 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         }}
         .btn-primary {{ background: #4ecdc4; color: #1a1a2e; }}
         .btn-primary:hover {{ background: #3dbdb5; }}
+        .btn-primary.active {{ background: #2db8a6; box-shadow: 0 0 12px #00ff88; border: 2px solid #00ff88; }}
         .btn-secondary {{ background: #444; color: white; }}
         .btn-secondary:hover {{ background: #555; }}
         .btn-vr {{ background: #ff6b6b; color: white; }}
@@ -720,25 +721,23 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 const centerX = zone.center?.x || idx * 30;
                 const centerY = zone.center?.y || idx * 30;
 
-                // 3 large wind arrows pointing to optimal heat flow (toward center/cooling)
-                for (let a = 0; a < 3; a++) {{
-                    const angle = (a / 3) * Math.PI * 2 + Math.PI / 6;
-                    const ox = centerX + Math.cos(angle) * radius * 1.2;
-                    const oz = centerY + Math.sin(angle) * radius * 1.2;
+                // 1 single large wind arrow pointing optimal heat flow direction (north)
+                const angle = Math.PI / 2; // North direction
+                const ox = centerX + Math.cos(angle) * radius * 1.3;
+                const oz = centerY + Math.sin(angle) * radius * 1.3;
 
-                    // Arrow points toward hotspot center (where cooling happens)
-                    const dir = new THREE.Vector3(
-                        centerX - ox, 0, centerY - oz
-                    ).normalize();
+                // Arrow points toward hotspot center (where cooling happens)
+                const dir = new THREE.Vector3(
+                    centerX - ox, 0, centerY - oz
+                ).normalize();
 
-                    // Large arrow: length 25, headLength 8, headWidth 5
-                    const arrow = new THREE.ArrowHelper(
-                        dir, new THREE.Vector3(ox, 6, oz),
-                        25, 0x00ccff, 8, 5
-                    );
-                    arrow.userData = {{ phase: a * 0.78 }};
-                    mitigationGroup.add(arrow);
-                }}
+                // Single large arrow: length 30, headLength 10, headWidth 6
+                const arrow = new THREE.ArrowHelper(
+                    dir, new THREE.Vector3(ox, 7, oz),
+                    30, 0x00ccff, 10, 6
+                );
+                arrow.userData = {{ zone_id: idx }};
+                mitigationGroup.add(arrow);
 
                 // Canopy spread rings for trees near hotspot
                 if (urbanData.trees) {{
@@ -777,9 +776,12 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         }}
 
         function toggleMitigation() {{
+            const btn = document.getElementById('toggleMitigation');
             mitigationGroup.visible = !mitigationGroup.visible;
+
             if (mitigationGroup.visible) {{
                 // MITIGATION ON: Reduce heat, cool colors
+                btn.classList.add('active');
 
                 // Cool down buildings (maintain definition)
                 buildingGroup.children.forEach(b => {{
@@ -816,6 +818,8 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 }});
             }} else {{
                 // MITIGATION OFF: Restore heat visualization
+                btn.classList.remove('active');
+
                 buildingGroup.children.forEach(b => {{
                     if (b.userData.originalIntensity) {{
                         b.material.emissiveIntensity = b.userData.originalIntensity;
