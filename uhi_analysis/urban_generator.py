@@ -324,22 +324,27 @@ class UrbanLandscapeGenerator:
         # Check for coordinate columns
         lat_col = 'lat' if 'lat' in hotspot_df.columns else None
         lon_col = 'lon' if 'lon' in hotspot_df.columns else None
-        
+
+        total_hotspots = len(hotspot_df)
+        hotspot_count = 0
+
         for idx, row in hotspot_df.iterrows():
             # Get position
             if lat_col and lon_col:
                 x = (row[lon_col] - hotspot_df[lon_col].min()) * scale_factor * 100
                 y = (row[lat_col] - hotspot_df[lat_col].min()) * scale_factor * 100
             else:
-                # Place hotspots with 50% in middle area, 50% distributed across landscape
-                if idx / len(hotspot_df) < 0.5:
-                    # Middle hotspots (40% to 60% of terrain in each direction)
-                    x = random.uniform(terrain_size[0] * 0.35, terrain_size[0] * 0.65)
-                    y = random.uniform(terrain_size[1] * 0.35, terrain_size[1] * 0.65)
+                # Place hotspots with 70% in middle area, 30% at edges
+                if hotspot_count / total_hotspots < 0.7:
+                    # Middle hotspots (30% to 70% of terrain in each direction)
+                    x = random.uniform(terrain_size[0] * 0.3, terrain_size[0] * 0.7)
+                    y = random.uniform(terrain_size[1] * 0.3, terrain_size[1] * 0.7)
                 else:
                     # Edge/distributed hotspots
-                    x = (idx % 10) * (terrain_size[0] / 10) + random.uniform(-5, 5)
-                    y = (idx // 10) * (terrain_size[1] / 10) + random.uniform(-5, 5)
+                    x = (hotspot_count % 10) * (terrain_size[0] / 10) + random.uniform(-5, 5)
+                    y = (hotspot_count // 10) * (terrain_size[1] / 10) + random.uniform(-5, 5)
+
+            hotspot_count += 1
 
             # Normalize to terrain
             x = min(max(x, 0), terrain_size[0])
