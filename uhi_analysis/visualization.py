@@ -815,13 +815,6 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                         Height: ${{data.height?.toFixed(1)}}m<br>
                         Cooling Effect: ${{(data.coolingEffect * 100).toFixed(0)}}%
                     `;
-                }} else if (data.type === 'hotspot') {{
-                    tooltip.innerHTML = `
-                        <strong>🔥 Heat Hotspot</strong><br>
-                        ID: ${{data.id}}<br>
-                        UHI Value: ${{data.uhi_value?.toFixed(4)}}°C<br>
-                        Intensity: ${{(data.intensity * 100).toFixed(1)}}%
-                    `;
                 }}
             }} else {{
                 tooltip.style.display = 'none';
