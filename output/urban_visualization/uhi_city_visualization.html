@@ -518,19 +518,21 @@
                 const centerX = zone.center?.x || idx * 30;
                 const centerY = zone.center?.y || idx * 30;
 
-                // 8 wind arrows radiating inward around hotspot
-                for (let a = 0; a < 8; a++) {
-                    const angle = (a / 8) * Math.PI * 2;
-                    const ox = centerX + Math.cos(angle) * radius * 0.9;
-                    const oz = centerY + Math.sin(angle) * radius * 0.9;
+                // 3 large wind arrows pointing to optimal heat flow (toward center/cooling)
+                for (let a = 0; a < 3; a++) {
+                    const angle = (a / 3) * Math.PI * 2 + Math.PI / 6;
+                    const ox = centerX + Math.cos(angle) * radius * 1.2;
+                    const oz = centerY + Math.sin(angle) * radius * 1.2;
 
+                    // Arrow points toward hotspot center (where cooling happens)
                     const dir = new THREE.Vector3(
                         centerX - ox, 0, centerY - oz
                     ).normalize();
 
+                    // Large arrow: length 25, headLength 8, headWidth 5
                     const arrow = new THREE.ArrowHelper(
-                        dir, new THREE.Vector3(ox, 8, oz),
-                        10, 0x88ccff, 2, 1.2
+                        dir, new THREE.Vector3(ox, 6, oz),
+                        25, 0x00ccff, 8, 5
                     );
                     arrow.userData = { phase: a * 0.78 };
                     mitigationGroup.add(arrow);
