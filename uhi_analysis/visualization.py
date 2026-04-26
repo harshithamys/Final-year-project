@@ -889,12 +889,64 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
             }});
         }}
         
+        // Create street lights group
+        const streetLightsGroup = new THREE.Group();
+        scene.add(streetLightsGroup);
+
+        function createStreetLights() {{
+            if (!urbanData.roads) return;
+
+            urbanData.roads.forEach((road) => {{
+                const start = new THREE.Vector3(road.start?.x || 0, 0, road.start?.y || 0);
+                const end = new THREE.Vector3(road.end?.x || 100, 0, road.end?.y || 0);
+
+                const direction = end.clone().sub(start);
+                const length = direction.length();
+                const numLights = Math.floor(length / 30) + 2; // One light every ~30 units
+
+                for (let i = 0; i < numLights; i++) {{
+                    const t = i / (numLights - 1);
+                    const pos = start.clone().lerp(end, t);
+
+                    // Light pole (post)
+                    const poleGeometry = new THREE.CylinderGeometry(0.3, 0.35, 8, 8);
+                    const poleMaterial = new THREE.MeshStandardMaterial({{
+                        color: 0x333333,
+                        metalness: 0.6,
+                        roughness: 0.4
+                    }});
+                    const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+                    pole.position.set(pos.x, 4, pos.z);
+                    streetLightsGroup.add(pole);
+
+                    // Lamp head
+                    const lampGeometry = new THREE.SphereGeometry(0.8, 16, 16);
+                    const lampMaterial = new THREE.MeshStandardMaterial({{
+                        color: 0xffff99,
+                        emissive: 0xffff99,
+                        emissiveIntensity: 0.3
+                    }});
+                    const lamp = new THREE.Mesh(lampGeometry, lampMaterial);
+                    lamp.position.set(pos.x, 8, pos.z);
+                    streetLightsGroup.add(lamp);
+
+                    // Point light (illuminates at night)
+                    const pointLight = new THREE.PointLight(0xffff99, 1.5, 40);
+                    pointLight.position.set(pos.x, 7.5, pos.z);
+                    streetLightsGroup.add(pointLight);
+                }}
+            }});
+
+            streetLightsGroup.visible = false; // Hidden during day
+        }}
+
         // Initialize scene
         createRoads();
         createBuildings();
         createTrees();
         createHotspots();
         createMitigation();
+        createStreetLights();
         
         // Raycaster for interaction
         const raycaster = new THREE.Raycaster();
@@ -1035,7 +1087,10 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 scene.fog.color = nightBackground;
                 sunLight.intensity = 0.2;
                 ambientLight.intensity = 0.15;
-                
+
+                // Show street lights at night
+                streetLightsGroup.visible = true;
+
                 // Make windows glow at night
                 buildingGroup.traverse((child) => {{
                     if (child.material && child.material.emissive) {{
@@ -1047,7 +1102,10 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 scene.fog.color = dayBackground;
                 sunLight.intensity = 0.8;
                 ambientLight.intensity = 0.4;
-                
+
+                // Hide street lights during day
+                streetLightsGroup.visible = false;
+
                 buildingGroup.traverse((child) => {{
                     if (child.material && child.material.emissive) {{
                         child.material.emissiveIntensity = 0.1;
