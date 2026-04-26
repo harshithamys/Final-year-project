@@ -711,16 +711,65 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         function toggleMitigation() {{
             mitigationGroup.visible = !mitigationGroup.visible;
             if (mitigationGroup.visible) {{
+                // MITIGATION ON: Reduce heat, cool colors
+
+                // Cool down buildings
                 buildingGroup.children.forEach(b => {{
                     if (b.material.emissiveIntensity) {{
                         b.userData.originalIntensity = b.material.emissiveIntensity;
+                        b.userData.originalColor = b.material.color.clone();
                         b.material.emissiveIntensity -= 0.2;
+                        // Shift color toward cooler blue tones
+                        b.material.color.lerp(new THREE.Color(0x4ecdc4), 0.15);
+                    }}
+                }});
+
+                // Cool down hotspots: reduce glow and change to cool colors
+                hotspotGroup.children.forEach(child => {{
+                    if (child.userData.phase !== undefined && child.material) {{
+                        child.userData.originalOpacity = child.material.opacity;
+                        // Reduce opacity by 60% for cooling effect
+                        child.material.opacity *= 0.4;
+                        // Change color to cool blue-cyan
+                        if (child.material.color) {{
+                            child.userData.originalColor = child.material.color.clone();
+                            child.material.color.copy(new THREE.Color(0x00ccff));
+                        }}
+                    }}
+                }});
+
+                // Reduce point light intensity
+                hotspotGroup.children.forEach(child => {{
+                    if (child.isLight) {{
+                        child.userData.originalIntensity = child.intensity;
+                        child.intensity *= 0.3;
+                        child.color.set(0x00ccff); // Cool cyan light
                     }}
                 }});
             }} else {{
+                // MITIGATION OFF: Restore heat visualization
                 buildingGroup.children.forEach(b => {{
                     if (b.userData.originalIntensity) {{
                         b.material.emissiveIntensity = b.userData.originalIntensity;
+                        if (b.userData.originalColor) {{
+                            b.material.color.copy(b.userData.originalColor);
+                        }}
+                    }}
+                }});
+
+                hotspotGroup.children.forEach(child => {{
+                    if (child.userData.originalOpacity) {{
+                        child.material.opacity = child.userData.originalOpacity;
+                        if (child.userData.originalColor) {{
+                            child.material.color.copy(child.userData.originalColor);
+                        }}
+                    }}
+                }});
+
+                hotspotGroup.children.forEach(child => {{
+                    if (child.isLight && child.userData.originalIntensity) {{
+                        child.intensity = child.userData.originalIntensity;
+                        child.color.set(0xff4400); // Restore hot orange
                     }}
                 }});
             }}
