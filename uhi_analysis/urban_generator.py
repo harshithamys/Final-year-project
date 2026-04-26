@@ -368,10 +368,10 @@ class UrbanLandscapeGenerator:
     def _generate_roads(self, params: Dict[str, float], terrain_size: Tuple[float, float]):
         """Generate road network based on road density."""
         road_density = params.get('road_density', 0.3)
-        
+
         # Number of roads based on density
         n_main_roads = max(2, int(road_density * 8))
-        n_streets = max(4, int(road_density * 20))
+        n_streets = max(5, int(road_density * 20) + 1)  # Added +1 for one extra street
         
         road_id = 0
         
@@ -433,16 +433,17 @@ class UrbanLandscapeGenerator:
             self.landscape.roads.append(road)
             road_id += 1
     
-    def _generate_buildings(self, params: Dict[str, float], 
+    def _generate_buildings(self, params: Dict[str, float],
                            terrain_size: Tuple[float, float],
                            scale_factor: float):
         """Generate buildings based on density and height parameters."""
         building_density = params.get('building_density', 3.0)
         avg_height = params.get('avg_building_height', 20)
         greenroof_ratio = params.get('greenroof_ratio', 0.05)
-        
+
         # Number of buildings based on density (scale with terrain)
-        n_buildings = int(building_density * terrain_size[0] * terrain_size[1] / 400)
+        # Increased density factor from 400 to 300 for more buildings
+        n_buildings = int(building_density * terrain_size[0] * terrain_size[1] / 300)
         n_buildings = max(20, min(n_buildings, 500))  # Clamp
         
         # Determine building type distribution based on height
@@ -471,19 +472,31 @@ class UrbanLandscapeGenerator:
             width = footprint_base * (0.8 + random.random() * 0.4)
             depth = footprint_base * (0.8 + random.random() * 0.4)
             
-            # Find position (avoid overlaps and roads)
+            # Find position (bias toward hotspots, avoid overlaps)
             for attempt in range(20):
-                x = random.uniform(width/2, terrain_size[0] - width/2)
-                y = random.uniform(depth/2, terrain_size[1] - depth/2)
-                
+                # 40% chance to place near hotspots, 60% random
+                if self.landscape.hotspot_zones and random.random() < 0.4:
+                    zone = random.choice(self.landscape.hotspot_zones)
+                    angle = random.uniform(0, 2 * math.pi)
+                    dist = random.uniform(zone.radius * 0.5, zone.radius * 2)
+                    x = zone.center_x + math.cos(angle) * dist
+                    y = zone.center_y + math.sin(angle) * dist
+                else:
+                    x = random.uniform(width/2, terrain_size[0] - width/2)
+                    y = random.uniform(depth/2, terrain_size[1] - depth/2)
+
+                # Clamp to terrain
+                x = max(width/2, min(x, terrain_size[0] - width/2))
+                y = max(depth/2, min(y, terrain_size[1] - depth/2))
+
                 # Check overlap with existing buildings
                 overlap = False
                 for px, py, pw, pd in placed_positions:
-                    if (abs(x - px) < (width + pw) / 2 + 3 and 
+                    if (abs(x - px) < (width + pw) / 2 + 3 and
                         abs(y - py) < (depth + pd) / 2 + 3):
                         overlap = True
                         break
-                
+
                 if not overlap:
                     break
             else:
