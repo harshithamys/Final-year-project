@@ -416,10 +416,12 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         const treeGroup = new THREE.Group();
         const hotspotGroup = new THREE.Group();
         const roadGroup = new THREE.Group();
+        const vehicleGroup = new THREE.Group();
         scene.add(buildingGroup);
         scene.add(treeGroup);
         scene.add(hotspotGroup);
         scene.add(roadGroup);
+        scene.add(vehicleGroup);
         
         // Lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
@@ -710,6 +712,64 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
             }});
         }}
 
+        // Create vehicles moving on roads
+        function createVehicles() {{
+            if (!urbanData.vehicles || !urbanData.roads) return;
+
+            const roadMap = new Map();
+            urbanData.roads.forEach(road => roadMap.set(road.id, road));
+
+            urbanData.vehicles.forEach((vehicle) => {{
+                const road = roadMap.get(vehicle.road_id);
+                if (!road) return;
+
+                // Vehicle dimensions
+                const width = vehicle.width || 2.0;
+                const height = vehicle.height || 1.5;
+                const length = vehicle.length || 4.0;
+
+                // Create vehicle body
+                const bodyGeometry = new THREE.BoxGeometry(width, height, length);
+                const bodyMaterial = new THREE.MeshStandardMaterial({{
+                    color: new THREE.Color(
+                        vehicle.color?.r || 0.2,
+                        vehicle.color?.g || 0.2,
+                        vehicle.color?.b || 0.2
+                    ),
+                    metalness: 0.7,
+                    roughness: 0.3
+                }});
+                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                body.castShadow = true;
+                body.userData = {{
+                    type: 'vehicle',
+                    id: vehicle.id,
+                    road_id: vehicle.road_id,
+                    position: vehicle.position,
+                    speed: vehicle.speed,
+                    roadData: road
+                }};
+                vehicleGroup.add(body);
+
+                // Add windows
+                const windowGeometry = new THREE.BoxGeometry(width * 0.3, height * 0.4, 0.05);
+                const windowMaterial = new THREE.MeshStandardMaterial({{
+                    color: 0x4488ff,
+                    transparent: true,
+                    opacity: 0.6,
+                    metalness: 0.8
+                }});
+
+                // Front and rear windows
+                for (let i = -1; i <= 1; i += 2) {{
+                    const window = new THREE.Mesh(windowGeometry, windowMaterial);
+                    window.position.z = i * (length / 2.5);
+                    window.position.y = height * 0.1;
+                    body.add(window);
+                }}
+            }});
+        }}
+
         // Create mitigation visualizations (wind arrows + canopy spreads)
         const mitigationGroup = new THREE.Group();
         function createMitigation() {{
@@ -947,6 +1007,7 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         createRoads();
         createBuildings();
         createTrees();
+        createVehicles();
         createHotspots();
         createMitigation();
         createStreetLights();
@@ -1155,6 +1216,39 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 if (child.userData.phase !== undefined && child.material.opacity !== undefined) {{
                     // Pulsing glow effect: 0.2 to 0.45 opacity
                     child.material.opacity = 0.2 + 0.25 * Math.sin(t + child.userData.phase);
+                }}
+            }});
+
+            // Animate vehicles moving along roads
+            vehicleGroup.children.forEach((vehicle) => {{
+                if (vehicle.userData.type === 'vehicle' && vehicle.userData.roadData) {{
+                    const road = vehicle.userData.roadData;
+                    const speed = vehicle.userData.speed || 20;
+                    const roadLength = Math.hypot(
+                        (road.end?.x || 0) - (road.start?.x || 0),
+                        (road.end?.y || 0) - (road.start?.y || 0)
+                    );
+
+                    // Update position along road (0-1)
+                    vehicle.userData.position += (speed / roadLength) * (time - lastTime) / 1000;
+                    if (vehicle.userData.position > 1) {{
+                        vehicle.userData.position = 0; // Loop back
+                    }}
+
+                    // Interpolate position on road
+                    const t = vehicle.userData.position;
+                    const startX = road.start?.x || 0;
+                    const startY = road.start?.y || 0;
+                    const endX = road.end?.x || 100;
+                    const endY = road.end?.y || 0;
+
+                    vehicle.position.x = startX + (endX - startX) * t;
+                    vehicle.position.z = startY + (endY - startY) * t;
+                    vehicle.position.y = 0.75; // Height above ground
+
+                    // Orient vehicle along road direction
+                    const direction = new THREE.Vector3(endX - startX, 0, endY - startY).normalize();
+                    vehicle.rotation.y = Math.atan2(direction.x, direction.z);
                 }}
             }});
 

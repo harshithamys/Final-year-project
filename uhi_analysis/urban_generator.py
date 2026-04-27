@@ -145,6 +145,31 @@ class Road:
 
 
 @dataclass
+class Vehicle:
+    """Represents a vehicle moving on a road."""
+    id: str
+    road_id: str
+    position: float  # 0-1 along road
+    speed: float  # units per second
+    width: float = 2.0
+    height: float = 1.5
+    length: float = 4.0
+    color: Tuple[float, float, float] = (0.2, 0.2, 0.2)  # Default gray
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'road_id': self.road_id,
+            'position': self.position,
+            'speed': self.speed,
+            'width': self.width,
+            'height': self.height,
+            'length': self.length,
+            'color': {'r': self.color[0], 'g': self.color[1], 'b': self.color[2]}
+        }
+
+
+@dataclass
 class HotspotZone:
     """Represents a heat hotspot zone for visualization."""
     id: str
@@ -154,7 +179,7 @@ class HotspotZone:
     intensity: float  # 0-1
     uhi_value: float
     color: Tuple[float, float, float]
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             'id': self.id,
@@ -173,22 +198,25 @@ class UrbanLandscape:
     trees: List[Tree] = field(default_factory=list)
     roads: List[Road] = field(default_factory=list)
     hotspot_zones: List[HotspotZone] = field(default_factory=list)
+    vehicles: List[Vehicle] = field(default_factory=list)
     terrain_size: Tuple[float, float] = (200, 200)
     metadata: Dict[str, Any] = field(default_factory=dict)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             'buildings': [b.to_dict() for b in self.buildings],
             'trees': [t.to_dict() for t in self.trees],
             'roads': [r.to_dict() for r in self.roads],
             'hotspot_zones': [h.to_dict() for h in self.hotspot_zones],
+            'vehicles': [v.to_dict() for v in self.vehicles],
             'terrain_size': {'width': self.terrain_size[0], 'depth': self.terrain_size[1]},
             'metadata': self.metadata,
             'statistics': {
                 'building_count': len(self.buildings),
                 'tree_count': len(self.trees),
                 'road_count': len(self.roads),
-                'hotspot_count': len(self.hotspot_zones)
+                'hotspot_count': len(self.hotspot_zones),
+                'vehicle_count': len(self.vehicles)
             }
         }
     
@@ -272,7 +300,10 @@ class UrbanLandscapeGenerator:
         
         # Generate vegetation
         self._generate_vegetation(params, terrain_size)
-        
+
+        # Generate vehicles on roads
+        self._generate_vehicles(terrain_size)
+
         # Apply heat exposure to buildings based on hotspot proximity
         self._apply_heat_exposure()
         
@@ -684,7 +715,45 @@ class UrbanLandscapeGenerator:
                 BuildingType.PUBLIC: 0.05,
                 BuildingType.MIXED_USE: 0.05,
             }
-    
+
+    def _generate_vehicles(self, terrain_size: Tuple[float, float]):
+        """Generate vehicles moving on roads."""
+        if not self.landscape.roads:
+            return
+
+        vehicle_colors = [
+            (0.8, 0.2, 0.2),  # Red
+            (0.2, 0.2, 0.8),  # Blue
+            (0.2, 0.8, 0.2),  # Green
+            (0.8, 0.8, 0.2),  # Yellow
+            (0.8, 0.2, 0.8),  # Magenta
+            (0.3, 0.3, 0.3),  # Dark gray
+        ]
+
+        vehicle_id = 0
+
+        # Place vehicles on main roads (every 3rd road to avoid overcrowding)
+        for idx, road in enumerate(self.landscape.roads):
+            if road.road_type != RoadType.MAIN_ROAD:
+                continue
+
+            # Place 2-3 vehicles per main road at random positions
+            n_vehicles = random.randint(2, 3)
+            for _ in range(n_vehicles):
+                speed = random.uniform(15, 25)  # Units per second
+                position = random.uniform(0, 1)  # Random position on road
+                color = random.choice(vehicle_colors)
+
+                vehicle = Vehicle(
+                    id=f"vehicle_{vehicle_id:04d}",
+                    road_id=road.id,
+                    position=position,
+                    speed=speed,
+                    color=color
+                )
+                self.landscape.vehicles.append(vehicle)
+                vehicle_id += 1
+
     def _calculate_hotspot_influence(self, x: float, y: float) -> float:
         """Calculate how much a position is influenced by nearby hotspots."""
         if not self.landscape.hotspot_zones:
