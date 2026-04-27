@@ -897,16 +897,18 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         function createStreetLights() {{
             if (!urbanData.roads) return;
 
+            const LIGHT_SPACING = 25; // Uniform spacing: one light every 25 units
+
             urbanData.roads.forEach((road) => {{
                 const start = new THREE.Vector3(road.start?.x || 0, 0, road.start?.y || 0);
                 const end = new THREE.Vector3(road.end?.x || 100, 0, road.end?.y || 0);
 
                 const direction = end.clone().sub(start);
                 const length = direction.length();
-                const numLights = Math.floor(length / 30) + 2; // One light every ~30 units
+                const numLights = Math.max(2, Math.ceil(length / LIGHT_SPACING)); // Uniform interval
 
                 for (let i = 0; i < numLights; i++) {{
-                    const t = i / (numLights - 1);
+                    const t = i / Math.max(1, numLights - 1);
                     const pos = start.clone().lerp(end, t);
 
                     // Light pole (post)

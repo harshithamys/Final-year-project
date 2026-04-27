@@ -373,19 +373,17 @@ class UrbanLandscapeGenerator:
             self.landscape.hotspot_zones.append(zone)
     
     def _generate_roads(self, params: Dict[str, float], terrain_size: Tuple[float, float]):
-        """Generate road network based on road density."""
+        """Generate uniform grid-based road network."""
         road_density = params.get('road_density', 0.3)
 
-        # Number of roads based on density
-        n_main_roads = max(2, int(road_density * 8))
-        n_streets = max(5, int(road_density * 20) + 1)  # Added +1 for one extra street
-        
+        # Grid spacing based on density (denser = smaller blocks)
+        grid_spacing_main = 60 if road_density > 0.3 else 80
+
         road_id = 0
-        
-        # Generate main roads (horizontal and vertical)
-        for i in range(n_main_roads // 2):
-            # Horizontal main road
-            y = terrain_size[1] * (i + 1) / (n_main_roads // 2 + 1)
+
+        # Generate main roads - uniform grid (horizontal)
+        y = grid_spacing_main
+        while y < terrain_size[1]:
             road = Road(
                 id=f"road_{road_id:04d}",
                 start_x=0,
@@ -397,9 +395,11 @@ class UrbanLandscapeGenerator:
             )
             self.landscape.roads.append(road)
             road_id += 1
-            
-            # Vertical main road
-            x = terrain_size[0] * (i + 1) / (n_main_roads // 2 + 1)
+            y += grid_spacing_main
+
+        # Generate main roads - uniform grid (vertical)
+        x = grid_spacing_main
+        while x < terrain_size[0]:
             road = Road(
                 id=f"road_{road_id:04d}",
                 start_x=x,
@@ -411,34 +411,41 @@ class UrbanLandscapeGenerator:
             )
             self.landscape.roads.append(road)
             road_id += 1
-        
-        # Generate smaller streets
-        for i in range(n_streets):
-            if random.random() < 0.5:
-                # Horizontal street
-                y = random.uniform(10, terrain_size[1] - 10)
-                x_start = random.uniform(0, terrain_size[0] / 2)
-                x_end = random.uniform(x_start + 20, terrain_size[0])
-            else:
-                # Vertical street
-                x = random.uniform(10, terrain_size[0] - 10)
-                y_start = random.uniform(0, terrain_size[1] / 2)
-                y_end = random.uniform(y_start + 20, terrain_size[1])
-                x_start, x_end = x, x
-                y = y_start
-                y_end_temp = y_end
-                
-            road = Road(
-                id=f"road_{road_id:04d}",
-                start_x=x_start if random.random() < 0.5 else x,
-                start_y=y if 'y_start' not in dir() else y_start,
-                end_x=x_end if random.random() < 0.5 else x,
-                end_y=y if 'y_end_temp' not in dir() else y_end_temp,
-                width=6 + random.random() * 2,
-                road_type=RoadType.STREET
-            )
-            self.landscape.roads.append(road)
-            road_id += 1
+            x += grid_spacing_main
+
+        # Generate secondary streets between main roads (horizontal)
+        y = grid_spacing_main / 2
+        while y < terrain_size[1]:
+            if not any(abs(road.start_y - y) < 2 for road in self.landscape.roads):
+                road = Road(
+                    id=f"road_{road_id:04d}",
+                    start_x=0,
+                    start_y=y,
+                    end_x=terrain_size[0],
+                    end_y=y,
+                    width=8,
+                    road_type=RoadType.STREET
+                )
+                self.landscape.roads.append(road)
+                road_id += 1
+            y += grid_spacing_main
+
+        # Generate secondary streets between main roads (vertical)
+        x = grid_spacing_main / 2
+        while x < terrain_size[0]:
+            if not any(abs(road.start_x - x) < 2 for road in self.landscape.roads if road.start_x == road.end_x):
+                road = Road(
+                    id=f"road_{road_id:04d}",
+                    start_x=x,
+                    start_y=0,
+                    end_x=x,
+                    end_y=terrain_size[1],
+                    width=8,
+                    road_type=RoadType.STREET
+                )
+                self.landscape.roads.append(road)
+                road_id += 1
+            x += grid_spacing_main
     
     def _generate_buildings(self, params: Dict[str, float],
                            terrain_size: Tuple[float, float],
