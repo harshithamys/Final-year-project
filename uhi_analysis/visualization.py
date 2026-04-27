@@ -958,18 +958,28 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
             if (!urbanData.roads) return;
 
             const LIGHT_SPACING = 25; // Uniform spacing: one light every 25 units
+            const SIDE_OFFSET = 4; // Distance from center of road to lamp
 
             urbanData.roads.forEach((road) => {{
                 const start = new THREE.Vector3(road.start?.x || 0, 0, road.start?.y || 0);
                 const end = new THREE.Vector3(road.end?.x || 100, 0, road.end?.y || 0);
 
-                const direction = end.clone().sub(start);
-                const length = direction.length();
+                const direction = end.clone().sub(start).normalize();
+                const length = start.distanceTo(end);
+
+                // Perpendicular direction (rotate 90 degrees)
+                const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+
                 const numLights = Math.max(2, Math.ceil(length / LIGHT_SPACING)); // Uniform interval
 
                 for (let i = 0; i < numLights; i++) {{
                     const t = i / Math.max(1, numLights - 1);
-                    const pos = start.clone().lerp(end, t);
+                    const centerPos = start.clone().lerp(end, t);
+
+                    // Place lights on alternating sides of road
+                    const side = (i % 2 === 0) ? 1 : -1;
+                    const offset = perpendicular.clone().multiplyScalar(side * SIDE_OFFSET);
+                    const pos = centerPos.clone().add(offset);
 
                     // Light pole (post)
                     const poleGeometry = new THREE.CylinderGeometry(0.3, 0.35, 8, 8);
