@@ -732,13 +732,13 @@ class UrbanLandscapeGenerator:
 
         vehicle_id = 0
 
-        # Place vehicles on main roads (every 3rd road to avoid overcrowding)
+        # Place vehicles only on main roads (reduced for performance)
         for idx, road in enumerate(self.landscape.roads):
             if road.road_type != RoadType.MAIN_ROAD:
                 continue
 
-            # Place 2-3 vehicles per main road at random positions
-            n_vehicles = random.randint(2, 3)
+            # Place 1-2 vehicles per main road (reduced from 2-3)
+            n_vehicles = random.randint(1, 2)
             for _ in range(n_vehicles):
                 speed = random.uniform(15, 25)  # Units per second
                 position = random.uniform(0, 1)  # Random position on road

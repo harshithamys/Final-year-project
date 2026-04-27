@@ -728,20 +728,82 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 const height = vehicle.height || 1.5;
                 const length = vehicle.length || 4.0;
 
-                // Create vehicle body
-                const bodyGeometry = new THREE.BoxGeometry(width, height, length);
+                // Create main vehicle body group
+                const vehicleGroup_item = new THREE.Group();
+
+                // Main car body (lower part)
+                const bodyLowGeometry = new THREE.BoxGeometry(width, height * 0.6, length * 0.85);
                 const bodyMaterial = new THREE.MeshStandardMaterial({{
                     color: new THREE.Color(
                         vehicle.color?.r || 0.2,
                         vehicle.color?.g || 0.2,
                         vehicle.color?.b || 0.2
                     ),
-                    metalness: 0.7,
-                    roughness: 0.3
+                    metalness: 0.6,
+                    roughness: 0.4
                 }});
-                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-                body.castShadow = true;
-                body.userData = {{
+                const bodyLow = new THREE.Mesh(bodyLowGeometry, bodyMaterial);
+                bodyLow.position.y = height * 0.3;
+                bodyLow.castShadow = true;
+                vehicleGroup_item.add(bodyLow);
+
+                // Car cabin/roof (upper part)
+                const cabinGeometry = new THREE.BoxGeometry(width * 0.85, height * 0.5, length * 0.5);
+                const cabin = new THREE.Mesh(cabinGeometry, bodyMaterial);
+                cabin.position.y = height * 0.9;
+                cabin.position.z = -length * 0.1;
+                cabin.castShadow = true;
+                vehicleGroup_item.add(cabin);
+
+                // Windows - front
+                const windowGeometry = new THREE.BoxGeometry(width * 0.7, height * 0.35, 0.03);
+                const windowMaterial = new THREE.MeshStandardMaterial({{
+                    color: 0x4488ff,
+                    transparent: true,
+                    opacity: 0.5,
+                    metalness: 0.9,
+                    roughness: 0.1
+                }});
+
+                const frontWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+                frontWindow.position.y = height * 0.95;
+                frontWindow.position.z = -length * 0.15;
+                vehicleGroup_item.add(frontWindow);
+
+                // Windows - rear
+                const rearWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+                rearWindow.position.y = height * 0.95;
+                rearWindow.position.z = length * 0.05;
+                vehicleGroup_item.add(rearWindow);
+
+                // Wheels (simple cylinders for performance)
+                const wheelRadius = width * 0.35;
+                const wheelGeometry = new THREE.CylinderGeometry(wheelRadius, wheelRadius, width * 0.4, 8);
+                const wheelMaterial = new THREE.MeshStandardMaterial({{
+                    color: 0x222222,
+                    metalness: 0.3,
+                    roughness: 0.8
+                }});
+
+                // Front wheels
+                for (let side = -1; side <= 1; side += 2) {{
+                    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                    wheel.rotation.z = Math.PI / 2;
+                    wheel.position.set(side * (width / 2 + 0.2), wheelRadius * 0.8, length * 0.25);
+                    wheel.castShadow = true;
+                    vehicleGroup_item.add(wheel);
+                }}
+
+                // Rear wheels
+                for (let side = -1; side <= 1; side += 2) {{
+                    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                    wheel.rotation.z = Math.PI / 2;
+                    wheel.position.set(side * (width / 2 + 0.2), wheelRadius * 0.8, -length * 0.25);
+                    wheel.castShadow = true;
+                    vehicleGroup_item.add(wheel);
+                }}
+
+                vehicleGroup_item.userData = {{
                     type: 'vehicle',
                     id: vehicle.id,
                     road_id: vehicle.road_id,
@@ -749,24 +811,8 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                     speed: vehicle.speed,
                     roadData: road
                 }};
-                vehicleGroup.add(body);
 
-                // Add windows
-                const windowGeometry = new THREE.BoxGeometry(width * 0.3, height * 0.4, 0.05);
-                const windowMaterial = new THREE.MeshStandardMaterial({{
-                    color: 0x4488ff,
-                    transparent: true,
-                    opacity: 0.6,
-                    metalness: 0.8
-                }});
-
-                // Front and rear windows
-                for (let i = -1; i <= 1; i += 2) {{
-                    const window = new THREE.Mesh(windowGeometry, windowMaterial);
-                    window.position.z = i * (length / 2.5);
-                    window.position.y = height * 0.1;
-                    body.add(window);
-                }}
+                vehicleGroup.add(vehicleGroup_item);
             }});
         }}
 
@@ -1230,35 +1276,35 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
             }});
 
             // Animate vehicles moving along roads
-            vehicleGroup.children.forEach((vehicle) => {{
-                if (vehicle.userData.type === 'vehicle' && vehicle.userData.roadData) {{
-                    const road = vehicle.userData.roadData;
-                    const speed = vehicle.userData.speed || 20;
+            vehicleGroup.children.forEach((vehicleGroup_item) => {{
+                if (vehicleGroup_item.userData.type === 'vehicle' && vehicleGroup_item.userData.roadData) {{
+                    const road = vehicleGroup_item.userData.roadData;
+                    const speed = vehicleGroup_item.userData.speed || 20;
                     const roadLength = Math.hypot(
                         (road.end?.x || 0) - (road.start?.x || 0),
                         (road.end?.y || 0) - (road.start?.y || 0)
                     );
 
                     // Update position along road (0-1)
-                    vehicle.userData.position += (speed / roadLength) * (time - lastTime) / 1000;
-                    if (vehicle.userData.position > 1) {{
-                        vehicle.userData.position = 0; // Loop back
+                    vehicleGroup_item.userData.position += (speed / roadLength) * (time - lastTime) / 1000;
+                    if (vehicleGroup_item.userData.position > 1) {{
+                        vehicleGroup_item.userData.position = 0; // Loop back
                     }}
 
                     // Interpolate position on road
-                    const t = vehicle.userData.position;
+                    const t = vehicleGroup_item.userData.position;
                     const startX = road.start?.x || 0;
                     const startY = road.start?.y || 0;
                     const endX = road.end?.x || 100;
                     const endY = road.end?.y || 0;
 
-                    vehicle.position.x = startX + (endX - startX) * t;
-                    vehicle.position.z = startY + (endY - startY) * t;
-                    vehicle.position.y = 0.75; // Height above ground
+                    vehicleGroup_item.position.x = startX + (endX - startX) * t;
+                    vehicleGroup_item.position.z = startY + (endY - startY) * t;
+                    vehicleGroup_item.position.y = 0.75; // Height above ground
 
                     // Orient vehicle along road direction
                     const direction = new THREE.Vector3(endX - startX, 0, endY - startY).normalize();
-                    vehicle.rotation.y = Math.atan2(direction.x, direction.z);
+                    vehicleGroup_item.rotation.y = Math.atan2(direction.x, direction.z);
                 }}
             }});
 
