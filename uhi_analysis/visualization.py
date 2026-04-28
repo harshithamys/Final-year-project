@@ -247,6 +247,7 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         }}
         .btn-primary {{ background: #4ecdc4; color: #1a1a2e; }}
         .btn-primary:hover {{ background: #3dbdb5; }}
+        .btn-primary.active {{ background: #2db8a6; box-shadow: 0 0 12px #00ff88; border: 2px solid #00ff88; }}
         .btn-secondary {{ background: #444; color: white; }}
         .btn-secondary:hover {{ background: #555; }}
         .btn-vr {{ background: #ff6b6b; color: white; }}
@@ -334,10 +335,22 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         <button class="btn-secondary" id="toggleBuildings">🏢 Toggle Buildings</button>
         <button class="btn-secondary" id="toggleTrees">🌳 Toggle Trees</button>
         <button class="btn-secondary" id="toggleHeatmap">🔥 Toggle Heatmap</button>
+        <button class="btn-primary" id="toggleMitigation">🌱 Toggle Mitigation</button>
         <div class="toggle-label">
             <span>Day/Night</span>
             <div class="toggle-switch" id="dayNightToggle"></div>
         </div>
+    </div>
+
+    <div id="mitigationPanel" style="position: absolute; left: 10px; top: 350px; background: rgba(0,0,0,0.85); color: white; padding: 20px; border-radius: 12px; width: 320px; max-height: 300px; overflow-y: auto; z-index: 100; display: none; border: 1px solid #4ecdc4;">
+        <h3 style="color: #ff6b6b; margin-bottom: 12px;">📋 Mitigation Strategies</h3>
+        <div id="strategiesList"></div>
+        <button class="btn-secondary" style="margin-top: 15px; width: 100%;" onclick="document.getElementById('mitigationPanel').style.display='none';">Close</button>
+    </div>
+
+    <div id="tempReduction" style="position: absolute; left: 50%; bottom: 240px; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: white; padding: 15px; border-radius: 12px; z-index: 100; display: none; border: 1px solid #4ecdc4; font-size: 13px; white-space: nowrap;">
+        <h4 style="color: #4ecdc4; margin-bottom: 8px;">✓ Mitigation Active</h4>
+        <div id="tempStats"></div>
     </div>
     
     <div id="legend">
@@ -403,10 +416,12 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         const treeGroup = new THREE.Group();
         const hotspotGroup = new THREE.Group();
         const roadGroup = new THREE.Group();
+        const vehicleGroup = new THREE.Group();
         scene.add(buildingGroup);
         scene.add(treeGroup);
         scene.add(hotspotGroup);
         scene.add(roadGroup);
+        scene.add(vehicleGroup);
         
         // Lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
@@ -458,21 +473,20 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 // Building body
                 const geometry = new THREE.BoxGeometry(width, height, depth);
                 
-                // Color based on heat exposure
+                // Color based on heat exposure with smooth lerp
                 const heatExposure = building.heat_exposure || 0;
-                let color;
-                if (heatExposure > 0.6) {{
-                    color = new THREE.Color(0.9, 0.3 + (1-heatExposure)*0.4, 0.3);
-                }} else {{
-                    color = new THREE.Color(
-                        building.color?.r || 0.7,
-                        building.color?.g || 0.7,
-                        building.color?.b || 0.7
-                    );
-                }}
-                
+                const baseColor = new THREE.Color(
+                    building.color?.r || 0.7,
+                    building.color?.g || 0.7,
+                    building.color?.b || 0.7
+                );
+                const hotColor = new THREE.Color(1.0, 0.2, 0.0);
+                const color = baseColor.clone().lerp(hotColor, heatExposure);
+
                 const material = new THREE.MeshStandardMaterial({{
                     color: color,
+                    emissive: color.clone(),
+                    emissiveIntensity: 0.1 + heatExposure * 0.5,
                     roughness: 0.7,
                     metalness: 0.1
                 }});
@@ -504,45 +518,112 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                     addWindowsToBuilding(mesh, width, height, depth, windowDensity);
                 }}
                 
-                // Green roof
+                // Green roof (added to mitigation group - only visible when mitigation is ON)
                 if (building.has_green_roof) {{
                     const roofGeometry = new THREE.BoxGeometry(width * 0.9, 0.5, depth * 0.9);
                     const roofMaterial = new THREE.MeshStandardMaterial({{color: 0x228b22}});
                     const roof = new THREE.Mesh(roofGeometry, roofMaterial);
                     roof.position.set(mesh.position.x, height + 0.25, mesh.position.z);
-                    buildingGroup.add(roof);
+                    roof.userData = {{ type: 'greenroof', buildingId: building.id }};
+                    mitigationGroup.add(roof);
                 }}
             }});
         }}
         
         function addWindowsToBuilding(building, width, height, depth, density) {{
-            const windowGeometry = new THREE.PlaneGeometry(1.5, 2);
+            const windowGeometry = new THREE.PlaneGeometry(1.2, 1.5);
             const windowMaterial = new THREE.MeshStandardMaterial({{
                 color: 0x88ccff,
                 emissive: 0x88ccff,
-                emissiveIntensity: 0.1,
-                metalness: 0.8,
-                roughness: 0.2
+                emissiveIntensity: 0.2,
+                metalness: 0.9,
+                roughness: 0.1
             }});
-            
+
+            const doorGeometry = new THREE.PlaneGeometry(1.0, 2.5);
+            const doorMaterial = new THREE.MeshStandardMaterial({{
+                color: 0x663300,
+                metalness: 0.3,
+                roughness: 0.7
+            }});
+
             const floors = Math.floor(height / 4);
             const windowsPerFloor = Math.floor(width / 3 * density);
-            
+            const windowsPerDepth = Math.floor(depth / 3 * density);
+
+            // Windows on all 4 faces
             for (let floor = 0; floor < floors; floor++) {{
+                const yOffset = floor * 4 + 2.5;
+
+                // Front face (X-axis windows)
                 for (let w = 0; w < windowsPerFloor; w++) {{
                     const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
-                    const xOffset = (w - windowsPerFloor/2) * 3 + 1.5;
-                    const yOffset = floor * 4 + 3;
-                    
-                    // Front face
+                    const xOffset = (w - windowsPerFloor/2) * 3;
                     windowMesh.position.set(
                         building.position.x + xOffset,
                         yOffset,
-                        building.position.z + depth/2 + 0.01
+                        building.position.z + depth/2 + 0.05
+                    );
+                    buildingGroup.add(windowMesh);
+                }}
+
+                // Back face
+                for (let w = 0; w < windowsPerFloor; w++) {{
+                    const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                    windowMesh.rotation.y = Math.PI;
+                    const xOffset = (w - windowsPerFloor/2) * 3;
+                    windowMesh.position.set(
+                        building.position.x + xOffset,
+                        yOffset,
+                        building.position.z - depth/2 - 0.05
+                    );
+                    buildingGroup.add(windowMesh);
+                }}
+
+                // Left face (Z-axis windows)
+                for (let d = 0; d < windowsPerDepth; d++) {{
+                    const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                    windowMesh.rotation.y = Math.PI / 2;
+                    const zOffset = (d - windowsPerDepth/2) * 3;
+                    windowMesh.position.set(
+                        building.position.x - width/2 - 0.05,
+                        yOffset,
+                        building.position.z + zOffset
+                    );
+                    buildingGroup.add(windowMesh);
+                }}
+
+                // Right face
+                for (let d = 0; d < windowsPerDepth; d++) {{
+                    const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                    windowMesh.rotation.y = -Math.PI / 2;
+                    const zOffset = (d - windowsPerDepth/2) * 3;
+                    windowMesh.position.set(
+                        building.position.x + width/2 + 0.05,
+                        yOffset,
+                        building.position.z + zOffset
                     );
                     buildingGroup.add(windowMesh);
                 }}
             }}
+
+            // Doors at ground level (front and back)
+            const doorMesh1 = new THREE.Mesh(doorGeometry, doorMaterial);
+            doorMesh1.position.set(
+                building.position.x,
+                1.2,
+                building.position.z + depth/2 + 0.05
+            );
+            buildingGroup.add(doorMesh1);
+
+            const doorMesh2 = new THREE.Mesh(doorGeometry, doorMaterial);
+            doorMesh2.rotation.y = Math.PI;
+            doorMesh2.position.set(
+                building.position.x,
+                1.2,
+                building.position.z - depth/2 - 0.05
+            );
+            buildingGroup.add(doorMesh2);
         }}
         
         // Create trees
@@ -630,85 +711,362 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 roadGroup.add(roadMesh);
             }});
         }}
-        
-        // Create hotspot zones
-        function createHotspots() {{
+
+        // Create vehicles moving on roads
+        function createVehicles() {{
+            if (!urbanData.vehicles || !urbanData.roads) return;
+
+            const roadMap = new Map();
+            urbanData.roads.forEach(road => roadMap.set(road.id, road));
+
+            urbanData.vehicles.forEach((vehicle) => {{
+                const road = roadMap.get(vehicle.road_id);
+                if (!road) return;
+
+                // Vehicle dimensions
+                const width = vehicle.width || 2.0;
+                const height = vehicle.height || 1.5;
+                const length = vehicle.length || 4.0;
+
+                // Create main vehicle body group
+                const vehicleGroup_item = new THREE.Group();
+
+                // Main car body (lower part)
+                const bodyLowGeometry = new THREE.BoxGeometry(width, height * 0.6, length * 0.85);
+                const bodyMaterial = new THREE.MeshStandardMaterial({{
+                    color: new THREE.Color(
+                        vehicle.color?.r || 0.2,
+                        vehicle.color?.g || 0.2,
+                        vehicle.color?.b || 0.2
+                    ),
+                    metalness: 0.6,
+                    roughness: 0.4
+                }});
+                const bodyLow = new THREE.Mesh(bodyLowGeometry, bodyMaterial);
+                bodyLow.position.y = height * 0.3;
+                bodyLow.castShadow = true;
+                vehicleGroup_item.add(bodyLow);
+
+                // Car cabin/roof (upper part)
+                const cabinGeometry = new THREE.BoxGeometry(width * 0.85, height * 0.5, length * 0.5);
+                const cabin = new THREE.Mesh(cabinGeometry, bodyMaterial);
+                cabin.position.y = height * 0.9;
+                cabin.position.z = -length * 0.1;
+                cabin.castShadow = true;
+                vehicleGroup_item.add(cabin);
+
+                // Windows - front
+                const windowGeometry = new THREE.BoxGeometry(width * 0.7, height * 0.35, 0.03);
+                const windowMaterial = new THREE.MeshStandardMaterial({{
+                    color: 0x4488ff,
+                    transparent: true,
+                    opacity: 0.5,
+                    metalness: 0.9,
+                    roughness: 0.1
+                }});
+
+                const frontWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+                frontWindow.position.y = height * 0.95;
+                frontWindow.position.z = -length * 0.15;
+                vehicleGroup_item.add(frontWindow);
+
+                // Windows - rear
+                const rearWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+                rearWindow.position.y = height * 0.95;
+                rearWindow.position.z = length * 0.05;
+                vehicleGroup_item.add(rearWindow);
+
+                // Wheels (simple cylinders for performance)
+                const wheelRadius = width * 0.35;
+                const wheelGeometry = new THREE.CylinderGeometry(wheelRadius, wheelRadius, width * 0.4, 8);
+                const wheelMaterial = new THREE.MeshStandardMaterial({{
+                    color: 0x222222,
+                    metalness: 0.3,
+                    roughness: 0.8
+                }});
+
+                // Front wheels
+                for (let side = -1; side <= 1; side += 2) {{
+                    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                    wheel.rotation.z = Math.PI / 2;
+                    wheel.position.set(side * (width / 2 + 0.2), wheelRadius * 0.8, length * 0.25);
+                    wheel.castShadow = true;
+                    vehicleGroup_item.add(wheel);
+                }}
+
+                // Rear wheels
+                for (let side = -1; side <= 1; side += 2) {{
+                    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                    wheel.rotation.z = Math.PI / 2;
+                    wheel.position.set(side * (width / 2 + 0.2), wheelRadius * 0.8, -length * 0.25);
+                    wheel.castShadow = true;
+                    vehicleGroup_item.add(wheel);
+                }}
+
+                vehicleGroup_item.userData = {{
+                    type: 'vehicle',
+                    id: vehicle.id,
+                    road_id: vehicle.road_id,
+                    position: vehicle.position,
+                    speed: vehicle.speed,
+                    roadData: road
+                }};
+
+                vehicleGroup.add(vehicleGroup_item);
+            }});
+        }}
+
+        // Create mitigation visualizations (wind arrows + canopy spreads)
+        const mitigationGroup = new THREE.Group();
+        function createMitigation() {{
             if (!urbanData.hotspot_zones) return;
-            
+
             urbanData.hotspot_zones.forEach((zone, idx) => {{
                 const intensity = zone.intensity || 0.5;
                 const radius = zone.radius || 20;
-                const height = intensity * 50 + 5;
-                
-                // Hotspot pillar
-                const pillarGeometry = new THREE.CylinderGeometry(
-                    2, 3, height, 16
-                );
-                const color = new THREE.Color(
-                    zone.color?.r || 1,
-                    zone.color?.g || 0,
-                    zone.color?.b || 0
-                );
-                const pillarMaterial = new THREE.MeshStandardMaterial({{
-                    color: color,
-                    emissive: color,
-                    emissiveIntensity: 0.4,
-                    transparent: true,
-                    opacity: 0.9
-                }});
-                
-                const pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
-                pillar.position.set(
-                    zone.center?.x || idx * 30,
-                    height / 2,
-                    zone.center?.y || idx * 30
-                );
-                pillar.castShadow = true;
-                pillar.userData = {{
-                    type: 'hotspot',
-                    id: zone.id,
-                    intensity: intensity,
-                    uhi_value: zone.uhi_value
-                }};
-                hotspotGroup.add(pillar);
-                interactiveObjects.push(pillar);
-                
-                // Ground heat indicator (circle)
-                const circleGeometry = new THREE.CircleGeometry(radius, 32);
-                const circleMaterial = new THREE.MeshBasicMaterial({{
-                    color: color,
-                    transparent: true,
-                    opacity: 0.3
-                }});
-                const circle = new THREE.Mesh(circleGeometry, circleMaterial);
-                circle.rotation.x = -Math.PI / 2;
-                circle.position.set(
-                    zone.center?.x || idx * 30,
-                    0.1,
-                    zone.center?.y || idx * 30
-                );
-                hotspotGroup.add(circle);
-                
-                // Glow effect for high intensity
-                if (intensity > 0.6) {{
-                    const glowGeometry = new THREE.CylinderGeometry(4, 5, height * 0.8, 16);
-                    const glowMaterial = new THREE.MeshBasicMaterial({{
-                        color: color,
-                        transparent: true,
-                        opacity: 0.15
+                const centerX = zone.center?.x || idx * 30;
+                const centerY = zone.center?.y || idx * 30;
+
+                // Canopy spread rings for trees near hotspot (shows tree cooling zones)
+                if (urbanData.trees) {{
+                    urbanData.trees.forEach((tree) => {{
+                        const tx = tree.position?.x || 0;
+                        const ty = tree.position?.y || 0;
+                        const dist = Math.hypot(tx - centerX, ty - centerY);
+                        if (dist < radius * 1.4 && dist > radius * 0.3) {{
+                            const canopyR = tree.canopy_radius || 3;
+                            const spreadGeo = new THREE.RingGeometry(canopyR, canopyR * 1.8, 32);
+                            const spreadMat = new THREE.MeshBasicMaterial({{
+                                color: 0x44aa44, transparent: true, opacity: 0.18,
+                                side: THREE.DoubleSide
+                            }});
+                            const spread = new THREE.Mesh(spreadGeo, spreadMat);
+                            spread.rotation.x = -Math.PI / 2;
+                            spread.position.set(tx, 0.15, ty);
+                            mitigationGroup.add(spread);
+
+                            // Elevated shade disk
+                            const shadeDisk = new THREE.CircleGeometry(canopyR * 1.4, 32);
+                            const shadeMat = new THREE.MeshBasicMaterial({{
+                                color: 0x228833, transparent: true, opacity: 0.12
+                            }});
+                            const shade = new THREE.Mesh(shadeDisk, shadeMat);
+                            shade.rotation.x = -Math.PI / 2;
+                            shade.position.set(tx, tree.height || 8, ty);
+                            mitigationGroup.add(shade);
+                        }}
                     }});
-                    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-                    glow.position.copy(pillar.position);
-                    hotspotGroup.add(glow);
                 }}
+            }});
+
+            scene.add(mitigationGroup);
+            mitigationGroup.visible = false;
+        }}
+
+        function toggleMitigation() {{
+            const btn = document.getElementById('toggleMitigation');
+            mitigationGroup.visible = !mitigationGroup.visible;
+
+            if (mitigationGroup.visible) {{
+                // MITIGATION ON: Reduce heat, cool colors, shrink hotspots
+                btn.classList.add('active');
+
+                // Cool down buildings (maintain definition)
+                buildingGroup.children.forEach(b => {{
+                    if (b.material.emissiveIntensity) {{
+                        b.userData.originalIntensity = b.material.emissiveIntensity;
+                        b.userData.originalColor = b.material.color.clone();
+                        b.material.emissiveIntensity -= 0.15;
+                        // Slight color shift to maintain building definition
+                        b.material.color.lerp(new THREE.Color(0x6ebdd4), 0.08);
+                    }}
+                }});
+
+                // Cool down hotspots: reduce radius, glow, and change to cool colors
+                hotspotHalos.forEach(halo => {{
+                    if (halo.userData.phase !== undefined && halo.material) {{
+                        // Scale down hotspot radius to 50%
+                        halo.userData.originalScale = halo.scale.x || 1.0;
+                        halo.scale.set(0.5, 0.5, 0.5);
+
+                        halo.userData.originalOpacity = halo.material.opacity;
+                        // Reduce opacity by 60% for cooling effect
+                        halo.material.opacity *= 0.4;
+                        // Change color to cool blue-cyan
+                        if (halo.material.color) {{
+                            halo.userData.originalColor = halo.material.color.clone();
+                            halo.material.color.copy(new THREE.Color(0x00ccff));
+                        }}
+                    }}
+                }});
+
+                // Reduce point light intensity
+                hotspotGroup.children.forEach(child => {{
+                    if (child.isLight) {{
+                        child.userData.originalIntensity = child.intensity;
+                        child.intensity *= 0.3;
+                        child.color.set(0x00ccff); // Cool cyan light
+                    }}
+                }});
+            }} else {{
+                // MITIGATION OFF: Restore heat visualization
+                btn.classList.remove('active');
+
+                buildingGroup.children.forEach(b => {{
+                    if (b.userData.originalIntensity) {{
+                        b.material.emissiveIntensity = b.userData.originalIntensity;
+                        if (b.userData.originalColor) {{
+                            b.material.color.copy(b.userData.originalColor);
+                        }}
+                    }}
+                }});
+
+                // Restore hotspot sizes, opacity, and colors
+                hotspotHalos.forEach(halo => {{
+                    // Restore original radius
+                    halo.scale.set(halo.userData.originalScale, halo.userData.originalScale, halo.userData.originalScale);
+
+                    if (halo.userData.originalOpacity) {{
+                        halo.material.opacity = halo.userData.originalOpacity;
+                        if (halo.userData.originalColor) {{
+                            halo.material.color.copy(halo.userData.originalColor);
+                        }}
+                    }}
+                }});
+
+                hotspotGroup.children.forEach(child => {{
+                    if (child.isLight && child.userData.originalIntensity) {{
+                        child.intensity = child.userData.originalIntensity;
+                        child.color.set(0xff4400); // Restore hot orange
+                    }}
+                }});
+            }}
+        }}
+
+        // Track hotspot halos and rings for scaling on mitigation toggle
+        const hotspotHalos = [];
+
+        // Create hotspot zones with ground halos and pulsing glow rings
+        function createHotspots() {{
+            if (!urbanData.hotspot_zones) return;
+
+            urbanData.hotspot_zones.forEach((zone, idx) => {{
+                const intensity = zone.intensity || 0.5;
+                const radius = zone.radius || 20;
+                const centerX = zone.center?.x || idx * 30;
+                const centerY = zone.center?.y || idx * 30;
+
+                const color = new THREE.Color(1.0, 0.267, 0.0);
+
+                // Ground-level heat halo (filled circle on ground)
+                const haloGeometry = new THREE.CircleGeometry(radius, 64);
+                const haloMaterial = new THREE.MeshBasicMaterial({{
+                    color: color,
+                    transparent: true,
+                    opacity: 0.4,
+                    side: THREE.DoubleSide
+                }});
+                const halo = new THREE.Mesh(haloGeometry, haloMaterial);
+                halo.rotation.x = -Math.PI / 2;
+                halo.position.set(centerX, 0.05, centerY);
+                halo.userData = {{ type: 'hotspot', id: zone.id, intensity, phase: idx * 0.78, originalScale: 1.0 }};
+                hotspotGroup.add(halo);
+                hotspotHalos.push(halo);
+                interactiveObjects.push(halo);
+
+                // Pulsing glow ring (animated opacity)
+                const ringGeometry = new THREE.RingGeometry(radius * 0.8, radius, 32);
+                const ringMaterial = new THREE.MeshBasicMaterial({{
+                    color: color,
+                    transparent: true,
+                    opacity: 0.3,
+                    side: THREE.DoubleSide
+                }});
+                const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+                ring.rotation.x = -Math.PI / 2;
+                ring.position.set(centerX, 0.06, centerY);
+                ring.userData = {{ phase: idx * 0.78, originalScale: 1.0 }};
+                hotspotGroup.add(ring);
+                hotspotHalos.push(ring);
+
+                // Point light at hotspot center for ambient glow
+                const light = new THREE.PointLight(0xff4400, intensity * 2, radius * 1.5);
+                light.position.set(centerX, 3, centerY);
+                hotspotGroup.add(light);
             }});
         }}
         
+        // Create street lights group
+        const streetLightsGroup = new THREE.Group();
+        scene.add(streetLightsGroup);
+
+        function createStreetLights() {{
+            if (!urbanData.roads) return;
+
+            const LIGHT_SPACING = 25; // Uniform spacing: one light every 25 units
+            const SIDE_OFFSET = 4; // Distance from center of road to lamp
+
+            urbanData.roads.forEach((road) => {{
+                const start = new THREE.Vector3(road.start?.x || 0, 0, road.start?.y || 0);
+                const end = new THREE.Vector3(road.end?.x || 100, 0, road.end?.y || 0);
+
+                const direction = end.clone().sub(start).normalize();
+                const length = start.distanceTo(end);
+
+                // Perpendicular direction (rotate 90 degrees)
+                const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+
+                const numLights = Math.max(2, Math.ceil(length / LIGHT_SPACING)); // Uniform interval
+
+                for (let i = 0; i < numLights; i++) {{
+                    const t = i / Math.max(1, numLights - 1);
+                    const centerPos = start.clone().lerp(end, t);
+
+                    // Place lights on alternating sides of road
+                    const side = (i % 2 === 0) ? 1 : -1;
+                    const offset = perpendicular.clone().multiplyScalar(side * SIDE_OFFSET);
+                    const pos = centerPos.clone().add(offset);
+
+                    // Light pole (post)
+                    const poleGeometry = new THREE.CylinderGeometry(0.3, 0.35, 8, 8);
+                    const poleMaterial = new THREE.MeshStandardMaterial({{
+                        color: 0x333333,
+                        metalness: 0.6,
+                        roughness: 0.4
+                    }});
+                    const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+                    pole.position.set(pos.x, 4, pos.z);
+                    streetLightsGroup.add(pole);
+
+                    // Lamp head
+                    const lampGeometry = new THREE.SphereGeometry(0.8, 16, 16);
+                    const lampMaterial = new THREE.MeshStandardMaterial({{
+                        color: 0xffff99,
+                        emissive: 0xffff99,
+                        emissiveIntensity: 0.3
+                    }});
+                    const lamp = new THREE.Mesh(lampGeometry, lampMaterial);
+                    lamp.position.set(pos.x, 8, pos.z);
+                    streetLightsGroup.add(lamp);
+
+                    // Point light (illuminates at night)
+                    const pointLight = new THREE.PointLight(0xffff99, 1.5, 40);
+                    pointLight.position.set(pos.x, 7.5, pos.z);
+                    streetLightsGroup.add(pointLight);
+                }}
+            }});
+
+            streetLightsGroup.visible = false; // Hidden during day
+        }}
+
         // Initialize scene
         createRoads();
         createBuildings();
         createTrees();
+        createVehicles();
         createHotspots();
+        createMitigation();
+        createStreetLights();
         
         // Raycaster for interaction
         const raycaster = new THREE.Raycaster();
@@ -745,13 +1103,6 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                         Height: ${{data.height?.toFixed(1)}}m<br>
                         Cooling Effect: ${{(data.coolingEffect * 100).toFixed(0)}}%
                     `;
-                }} else if (data.type === 'hotspot') {{
-                    tooltip.innerHTML = `
-                        <strong>🔥 Heat Hotspot</strong><br>
-                        ID: ${{data.id}}<br>
-                        UHI Value: ${{data.uhi_value?.toFixed(4)}}°C<br>
-                        Intensity: ${{(data.intensity * 100).toFixed(1)}}%
-                    `;
                 }}
             }} else {{
                 tooltip.style.display = 'none';
@@ -759,7 +1110,52 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         }}
         
         window.addEventListener('mousemove', onMouseMove);
-        
+
+        // Click handler for building mitigation panel
+        window.addEventListener('click', (event) => {{
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactiveObjects);
+
+            if (intersects.length > 0) {{
+                const obj = intersects[0].object;
+                const data = obj.userData;
+
+                if (data.type === 'building') {{
+                    showMitigationPanel(data);
+                }}
+            }}
+        }});
+
+        function showMitigationPanel(buildingData) {{
+            const strategies = [
+                {{ name: 'Street Tree Planting', cooling: 2.5, cost: 45, timeline: 6 }},
+                {{ name: 'Urban Parks & Green Spaces', cooling: 3.5, cost: 85, timeline: 18 }},
+                {{ name: 'Green Roofs (Extensive)', cooling: 1.8, cost: 120, timeline: 4 }},
+                {{ name: 'Cool Pavements', cooling: 1.5, cost: 35, timeline: 3 }}
+            ];
+
+            let html = `<div style="margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid #333;">
+                <strong style="color: #4ecdc4;">Building Info</strong><br>
+                <span style="font-size: 12px; color: #aaa;">Heat Exposure: ${{(buildingData.heatExposure * 100).toFixed(1)}}%</span><br>
+                <span style="font-size: 12px; color: #aaa;">Est. Temp: ${{(28 + buildingData.heatExposure * 10).toFixed(1)}}°C</span>
+            </div>`;
+
+            html += '<strong style="color: #4ecdc4; display: block; margin-bottom: 10px;">Recommended Strategies</strong>';
+            strategies.forEach(s => {{
+                html += `<div style="background: rgba(78, 205, 196, 0.1); padding: 10px; margin: 8px 0; border-left: 3px solid #4ecdc4; border-radius: 4px; font-size: 12px;">
+                    <div style="font-weight: bold; color: #4ecdc4;">${{s.name}}</div>
+                    <div style="color: #ff6b6b; margin-top: 4px;">Cooling: −${{s.cooling}}°C</div>
+                    <div style="color: #aaa; font-size: 11px;">Cost: $${{s.cost}}/m² | Timeline: ${{s.timeline}} months</div>
+                </div>`;
+            }});
+
+            document.getElementById('strategiesList').innerHTML = html;
+            document.getElementById('mitigationPanel').style.display = 'block';
+        }}
+
         // UI Controls
         document.getElementById('resetCamera').onclick = () => {{
             camera.position.set(150, 120, 150);
@@ -777,7 +1173,31 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         document.getElementById('toggleHeatmap').onclick = () => {{
             hotspotGroup.visible = !hotspotGroup.visible;
         }};
-        
+
+        document.getElementById('toggleMitigation').onclick = () => {{
+            toggleMitigation();
+            document.getElementById('tempReduction').style.display = mitigationGroup.visible ? 'block' : 'none';
+            if (mitigationGroup.visible) {{
+                updateTempStats();
+            }}
+        }};
+
+        function updateTempStats() {{
+            const strategies = [
+                {{ name: 'Street Tree Planting', cooling: 2.5 }},
+                {{ name: 'Urban Parks', cooling: 3.5 }},
+                {{ name: 'Green Roofs', cooling: 1.8 }},
+                {{ name: 'Cool Pavements', cooling: 1.5 }}
+            ];
+            const totalCooling = strategies.reduce((sum, s) => sum + s.cooling, 0);
+            let html = '';
+            strategies.forEach(s => {{
+                html += `<div style="display: flex; justify-content: space-between; margin: 6px 0;"><span>${{s.name}}:</span><span style="color: #ff6b6b;">−${{s.cooling}}°C</span></div>`;
+            }});
+            html += `<div style="border-top: 1px solid #333; margin: 8px 0; padding-top: 8px; font-weight: bold;">Estimated Total: −${{totalCooling.toFixed(1)}}°C</div>`;
+            document.getElementById('tempStats').innerHTML = html;
+        }}
+
         document.getElementById('dayNightToggle').onclick = function() {{
             this.classList.toggle('active');
             isNightMode = !isNightMode;
@@ -787,7 +1207,10 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 scene.fog.color = nightBackground;
                 sunLight.intensity = 0.2;
                 ambientLight.intensity = 0.15;
-                
+
+                // Show street lights at night
+                streetLightsGroup.visible = true;
+
                 // Make windows glow at night
                 buildingGroup.traverse((child) => {{
                     if (child.material && child.material.emissive) {{
@@ -799,7 +1222,10 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
                 scene.fog.color = dayBackground;
                 sunLight.intensity = 0.8;
                 ambientLight.intensity = 0.4;
-                
+
+                // Hide street lights during day
+                streetLightsGroup.visible = false;
+
                 buildingGroup.traverse((child) => {{
                     if (child.material && child.material.emissive) {{
                         child.material.emissiveIntensity = 0.1;
@@ -839,22 +1265,56 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
         function animate(time) {{
             requestAnimationFrame(animate);
             controls.update();
-            
-            // Animate hotspot pillars
-            const t = time * 0.001;
-            hotspotGroup.children.forEach((child, i) => {{
-                if (child.userData.type === 'hotspot') {{
-                    child.material.emissiveIntensity = 0.3 + Math.sin(t * 2 + i) * 0.1;
+
+            // Animate hotspot glow rings and halos
+            const t = time * 0.003;
+            hotspotGroup.children.forEach((child) => {{
+                if (child.userData.phase !== undefined && child.material.opacity !== undefined) {{
+                    // Pulsing glow effect: 0.2 to 0.45 opacity
+                    child.material.opacity = 0.2 + 0.25 * Math.sin(t + child.userData.phase);
                 }}
             }});
-            
+
+            // Animate vehicles moving along roads
+            vehicleGroup.children.forEach((vehicleGroup_item) => {{
+                if (vehicleGroup_item.userData.type === 'vehicle' && vehicleGroup_item.userData.roadData) {{
+                    const road = vehicleGroup_item.userData.roadData;
+                    const speed = vehicleGroup_item.userData.speed || 20;
+                    const roadLength = Math.hypot(
+                        (road.end?.x || 0) - (road.start?.x || 0),
+                        (road.end?.y || 0) - (road.start?.y || 0)
+                    );
+
+                    // Update position along road (0-1)
+                    vehicleGroup_item.userData.position += (speed / roadLength) * (time - lastTime) / 1000;
+                    if (vehicleGroup_item.userData.position > 1) {{
+                        vehicleGroup_item.userData.position = 0; // Loop back
+                    }}
+
+                    // Interpolate position on road
+                    const t = vehicleGroup_item.userData.position;
+                    const startX = road.start?.x || 0;
+                    const startY = road.start?.y || 0;
+                    const endX = road.end?.x || 100;
+                    const endY = road.end?.y || 0;
+
+                    vehicleGroup_item.position.x = startX + (endX - startX) * t;
+                    vehicleGroup_item.position.z = startY + (endY - startY) * t;
+                    vehicleGroup_item.position.y = 0.75; // Height above ground
+
+                    // Orient vehicle along road direction
+                    const direction = new THREE.Vector3(endX - startX, 0, endY - startY).normalize();
+                    vehicleGroup_item.rotation.y = Math.atan2(direction.x, direction.z);
+                }}
+            }});
+
             // Update stats
             if (time - lastTime > 500) {{
                 const fps = Math.round(1000 / (time - lastTime) * 2);
                 statsDiv.innerHTML = `FPS: ~${{fps}}<br>Objects: ${{scene.children.length}}`;
                 lastTime = time;
             }}
-            
+
             renderer.render(scene, camera);
         }}
         
@@ -1209,9 +1669,9 @@ class ThreeJSGenerator(BaseVisualizationGenerator):
             uhi_min = min(uhi_values) if uhi_values else 0
             uhi_max = max(uhi_values) if uhi_values else 1
             
-            # Generate HTML
+            # Generate HTML (use default=str to handle bool/numpy types)
             html_content = self.HTML_TEMPLATE_ENHANCED.format(
-                urban_data_json=json.dumps(urban_data),
+                urban_data_json=json.dumps(urban_data, default=str),
                 building_count=building_count,
                 tree_count=tree_count,
                 hotspot_count=hotspot_count,

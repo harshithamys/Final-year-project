@@ -145,6 +145,31 @@ class Road:
 
 
 @dataclass
+class Vehicle:
+    """Represents a vehicle moving on a road."""
+    id: str
+    road_id: str
+    position: float  # 0-1 along road
+    speed: float  # units per second
+    width: float = 2.0
+    height: float = 1.5
+    length: float = 4.0
+    color: Tuple[float, float, float] = (0.2, 0.2, 0.2)  # Default gray
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'road_id': self.road_id,
+            'position': self.position,
+            'speed': self.speed,
+            'width': self.width,
+            'height': self.height,
+            'length': self.length,
+            'color': {'r': self.color[0], 'g': self.color[1], 'b': self.color[2]}
+        }
+
+
+@dataclass
 class HotspotZone:
     """Represents a heat hotspot zone for visualization."""
     id: str
@@ -154,7 +179,7 @@ class HotspotZone:
     intensity: float  # 0-1
     uhi_value: float
     color: Tuple[float, float, float]
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             'id': self.id,
@@ -173,22 +198,25 @@ class UrbanLandscape:
     trees: List[Tree] = field(default_factory=list)
     roads: List[Road] = field(default_factory=list)
     hotspot_zones: List[HotspotZone] = field(default_factory=list)
+    vehicles: List[Vehicle] = field(default_factory=list)
     terrain_size: Tuple[float, float] = (200, 200)
     metadata: Dict[str, Any] = field(default_factory=dict)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             'buildings': [b.to_dict() for b in self.buildings],
             'trees': [t.to_dict() for t in self.trees],
             'roads': [r.to_dict() for r in self.roads],
             'hotspot_zones': [h.to_dict() for h in self.hotspot_zones],
+            'vehicles': [v.to_dict() for v in self.vehicles],
             'terrain_size': {'width': self.terrain_size[0], 'depth': self.terrain_size[1]},
             'metadata': self.metadata,
             'statistics': {
                 'building_count': len(self.buildings),
                 'tree_count': len(self.trees),
                 'road_count': len(self.roads),
-                'hotspot_count': len(self.hotspot_zones)
+                'hotspot_count': len(self.hotspot_zones),
+                'vehicle_count': len(self.vehicles)
             }
         }
     
@@ -272,7 +300,10 @@ class UrbanLandscapeGenerator:
         
         # Generate vegetation
         self._generate_vegetation(params, terrain_size)
-        
+
+        # Generate vehicles on roads
+        self._generate_vehicles(terrain_size)
+
         # Apply heat exposure to buildings based on hotspot proximity
         self._apply_heat_exposure()
         
@@ -324,29 +355,43 @@ class UrbanLandscapeGenerator:
         # Check for coordinate columns
         lat_col = 'lat' if 'lat' in hotspot_df.columns else None
         lon_col = 'lon' if 'lon' in hotspot_df.columns else None
-        
+
+        total_hotspots = len(hotspot_df)
+        hotspot_count = 0
+
         for idx, row in hotspot_df.iterrows():
             # Get position
             if lat_col and lon_col:
                 x = (row[lon_col] - hotspot_df[lon_col].min()) * scale_factor * 100
                 y = (row[lat_col] - hotspot_df[lat_col].min()) * scale_factor * 100
             else:
-                x = (idx % 10) * (terrain_size[0] / 10) + random.uniform(-5, 5)
-                y = (idx // 10) * (terrain_size[1] / 10) + random.uniform(-5, 5)
-            
-            # Normalize to terrain
-            x = min(max(x, 0), terrain_size[0])
-            y = min(max(y, 0), terrain_size[1])
-            
+                # Place hotspots with 85% in dense middle area, 15% at edges (where buildings cluster)
+                if hotspot_count / total_hotspots < 0.85:
+                    # Dense middle hotspots (25% to 75% of terrain - where buildings concentrate)
+                    x = random.uniform(terrain_size[0] * 0.25, terrain_size[0] * 0.75)
+                    y = random.uniform(terrain_size[1] * 0.25, terrain_size[1] * 0.75)
+                else:
+                    # Sparse edge hotspots
+                    x = (hotspot_count % 10) * (terrain_size[0] / 10) + random.uniform(-5, 5)
+                    y = (hotspot_count // 10) * (terrain_size[1] / 10) + random.uniform(-5, 5)
+
+            hotspot_count += 1
+
             uhi_value = row[uhi_col]
             intensity = (uhi_value - uhi_min) / uhi_range
-            
+
             # Color based on intensity
             color = self._heat_to_color(intensity)
-            
+
             # Radius based on intensity
             radius = 10 + intensity * 30
-            
+
+            # Normalize to terrain with margin for radius
+            # Ensure hotspot center + radius stays within bounds
+            margin = radius + 2  # Add small buffer
+            x = min(max(x, margin), terrain_size[0] - margin)
+            y = min(max(y, margin), terrain_size[1] - margin)
+
             zone = HotspotZone(
                 id=f"hotspot_{idx:04d}",
                 center_x=x,
@@ -359,19 +404,17 @@ class UrbanLandscapeGenerator:
             self.landscape.hotspot_zones.append(zone)
     
     def _generate_roads(self, params: Dict[str, float], terrain_size: Tuple[float, float]):
-        """Generate road network based on road density."""
+        """Generate uniform grid-based road network."""
         road_density = params.get('road_density', 0.3)
-        
-        # Number of roads based on density
-        n_main_roads = max(2, int(road_density * 8))
-        n_streets = max(4, int(road_density * 20))
-        
+
+        # Grid spacing based on density (denser = smaller blocks)
+        grid_spacing_main = 60 if road_density > 0.3 else 80
+
         road_id = 0
-        
-        # Generate main roads (horizontal and vertical)
-        for i in range(n_main_roads // 2):
-            # Horizontal main road
-            y = terrain_size[1] * (i + 1) / (n_main_roads // 2 + 1)
+
+        # Generate main roads - uniform grid (horizontal)
+        y = grid_spacing_main
+        while y < terrain_size[1]:
             road = Road(
                 id=f"road_{road_id:04d}",
                 start_x=0,
@@ -383,9 +426,11 @@ class UrbanLandscapeGenerator:
             )
             self.landscape.roads.append(road)
             road_id += 1
-            
-            # Vertical main road
-            x = terrain_size[0] * (i + 1) / (n_main_roads // 2 + 1)
+            y += grid_spacing_main
+
+        # Generate main roads - uniform grid (vertical)
+        x = grid_spacing_main
+        while x < terrain_size[0]:
             road = Road(
                 id=f"road_{road_id:04d}",
                 start_x=x,
@@ -397,45 +442,53 @@ class UrbanLandscapeGenerator:
             )
             self.landscape.roads.append(road)
             road_id += 1
-        
-        # Generate smaller streets
-        for i in range(n_streets):
-            if random.random() < 0.5:
-                # Horizontal street
-                y = random.uniform(10, terrain_size[1] - 10)
-                x_start = random.uniform(0, terrain_size[0] / 2)
-                x_end = random.uniform(x_start + 20, terrain_size[0])
-            else:
-                # Vertical street
-                x = random.uniform(10, terrain_size[0] - 10)
-                y_start = random.uniform(0, terrain_size[1] / 2)
-                y_end = random.uniform(y_start + 20, terrain_size[1])
-                x_start, x_end = x, x
-                y = y_start
-                y_end_temp = y_end
-                
-            road = Road(
-                id=f"road_{road_id:04d}",
-                start_x=x_start if random.random() < 0.5 else x,
-                start_y=y if 'y_start' not in dir() else y_start,
-                end_x=x_end if random.random() < 0.5 else x,
-                end_y=y if 'y_end_temp' not in dir() else y_end_temp,
-                width=6 + random.random() * 2,
-                road_type=RoadType.STREET
-            )
-            self.landscape.roads.append(road)
-            road_id += 1
+            x += grid_spacing_main
+
+        # Generate secondary streets between main roads (horizontal)
+        y = grid_spacing_main / 2
+        while y < terrain_size[1]:
+            if not any(abs(road.start_y - y) < 2 for road in self.landscape.roads):
+                road = Road(
+                    id=f"road_{road_id:04d}",
+                    start_x=0,
+                    start_y=y,
+                    end_x=terrain_size[0],
+                    end_y=y,
+                    width=8,
+                    road_type=RoadType.STREET
+                )
+                self.landscape.roads.append(road)
+                road_id += 1
+            y += grid_spacing_main
+
+        # Generate secondary streets between main roads (vertical)
+        x = grid_spacing_main / 2
+        while x < terrain_size[0]:
+            if not any(abs(road.start_x - x) < 2 for road in self.landscape.roads if road.start_x == road.end_x):
+                road = Road(
+                    id=f"road_{road_id:04d}",
+                    start_x=x,
+                    start_y=0,
+                    end_x=x,
+                    end_y=terrain_size[1],
+                    width=8,
+                    road_type=RoadType.STREET
+                )
+                self.landscape.roads.append(road)
+                road_id += 1
+            x += grid_spacing_main
     
-    def _generate_buildings(self, params: Dict[str, float], 
+    def _generate_buildings(self, params: Dict[str, float],
                            terrain_size: Tuple[float, float],
                            scale_factor: float):
         """Generate buildings based on density and height parameters."""
         building_density = params.get('building_density', 3.0)
         avg_height = params.get('avg_building_height', 20)
         greenroof_ratio = params.get('greenroof_ratio', 0.05)
-        
+
         # Number of buildings based on density (scale with terrain)
-        n_buildings = int(building_density * terrain_size[0] * terrain_size[1] / 400)
+        # Increased density factor from 400 to 300 for more buildings
+        n_buildings = int(building_density * terrain_size[0] * terrain_size[1] / 300)
         n_buildings = max(20, min(n_buildings, 500))  # Clamp
         
         # Determine building type distribution based on height
@@ -464,19 +517,31 @@ class UrbanLandscapeGenerator:
             width = footprint_base * (0.8 + random.random() * 0.4)
             depth = footprint_base * (0.8 + random.random() * 0.4)
             
-            # Find position (avoid overlaps and roads)
+            # Find position (bias toward hotspots, avoid overlaps)
             for attempt in range(20):
-                x = random.uniform(width/2, terrain_size[0] - width/2)
-                y = random.uniform(depth/2, terrain_size[1] - depth/2)
-                
+                # 40% chance to place near hotspots, 60% random
+                if self.landscape.hotspot_zones and random.random() < 0.4:
+                    zone = random.choice(self.landscape.hotspot_zones)
+                    angle = random.uniform(0, 2 * math.pi)
+                    dist = random.uniform(zone.radius * 0.5, zone.radius * 2)
+                    x = zone.center_x + math.cos(angle) * dist
+                    y = zone.center_y + math.sin(angle) * dist
+                else:
+                    x = random.uniform(width/2, terrain_size[0] - width/2)
+                    y = random.uniform(depth/2, terrain_size[1] - depth/2)
+
+                # Clamp to terrain
+                x = max(width/2, min(x, terrain_size[0] - width/2))
+                y = max(depth/2, min(y, terrain_size[1] - depth/2))
+
                 # Check overlap with existing buildings
                 overlap = False
                 for px, py, pw, pd in placed_positions:
-                    if (abs(x - px) < (width + pw) / 2 + 3 and 
+                    if (abs(x - px) < (width + pw) / 2 + 3 and
                         abs(y - py) < (depth + pd) / 2 + 3):
                         overlap = True
                         break
-                
+
                 if not overlap:
                     break
             else:
@@ -519,32 +584,65 @@ class UrbanLandscapeGenerator:
             building_id += 1
     
     def _generate_vegetation(self, params: Dict[str, float], terrain_size: Tuple[float, float]):
-        """Generate trees and vegetation."""
+        """Generate trees and vegetation with optimal placement near hotspots."""
         tree_density = params.get('tree_density', 0.1)
         green_ratio = params.get('green_ratio', 0.3)
         park_ratio = params.get('park_grass_ratio', 0.1)
-        
+
         # Number of trees based on density
         n_trees = int((tree_density + green_ratio * 0.5) * terrain_size[0] * terrain_size[1] / 50)
         n_trees = max(10, min(n_trees, 300))
-        
+
         tree_id = 0
-        
-        for _ in range(n_trees):
-            x = random.uniform(2, terrain_size[0] - 2)
-            y = random.uniform(2, terrain_size[1] - 2)
-            
+        zones = self.landscape.hotspot_zones
+
+        # Find building_0018 for tree planting
+        building_0018 = None
+        for b in self.landscape.buildings:
+            if b.id == 'building_0018':
+                building_0018 = b
+                break
+
+        for i in range(n_trees):
+            # 30% around building_0018, 30% near hotspot zones, 40% random
+            if building_0018 and i / n_trees < 0.3:
+                # Plant trees around building_0018
+                angle = random.uniform(0, 2 * math.pi)
+                dist = random.uniform(building_0018.width * 1.2, building_0018.width * 4)
+                x = building_0018.x + math.cos(angle) * dist
+                y = building_0018.y + math.sin(angle) * dist
+
+                # Clamp to terrain bounds
+                x = max(2, min(x, terrain_size[0] - 2))
+                y = max(2, min(y, terrain_size[1] - 2))
+                near_hotspot = True
+            elif zones and i / n_trees < 0.6:
+                zone = random.choice(zones)
+                angle = random.uniform(0, 2 * math.pi)
+                dist = random.uniform(zone.radius * 0.3, zone.radius * 1.4)
+                x = zone.center_x + math.cos(angle) * dist
+                y = zone.center_y + math.sin(angle) * dist
+
+                # Clamp to terrain bounds
+                x = max(2, min(x, terrain_size[0] - 2))
+                y = max(2, min(y, terrain_size[1] - 2))
+                near_hotspot = True
+            else:
+                x = random.uniform(2, terrain_size[0] - 2)
+                y = random.uniform(2, terrain_size[1] - 2)
+                near_hotspot = False
+
             # Check if position conflicts with buildings
             conflict = False
             for building in self.landscape.buildings:
-                if (abs(x - building.x) < building.width/2 + 2 and 
+                if (abs(x - building.x) < building.width/2 + 2 and
                     abs(y - building.y) < building.depth/2 + 2):
                     conflict = True
                     break
-            
+
             if conflict:
                 continue
-            
+
             # Tree type based on location
             if random.random() < park_ratio:
                 veg_type = VegetationType.TREE_DECIDUOUS
@@ -562,11 +660,14 @@ class UrbanLandscapeGenerator:
                 else:
                     height = random.uniform(5, 12)
                     canopy = random.uniform(2, 5)
-            
+
             # Color variation
             green_var = random.uniform(-0.1, 0.1)
             color = (0.15 + green_var, 0.5 + green_var, 0.15 + green_var)
-            
+
+            # Trees near hotspots have higher cooling effect
+            cooling = (0.5 + random.random() * 0.3) if near_hotspot else (0.3 + random.random() * 0.4)
+
             tree = Tree(
                 id=f"tree_{tree_id:04d}",
                 x=x,
@@ -577,9 +678,9 @@ class UrbanLandscapeGenerator:
                 trunk_radius=height * 0.05,
                 vegetation_type=veg_type,
                 color=color,
-                cooling_effect=0.3 + random.random() * 0.4
+                cooling_effect=cooling
             )
-            
+
             self.landscape.trees.append(tree)
             tree_id += 1
     
@@ -614,7 +715,45 @@ class UrbanLandscapeGenerator:
                 BuildingType.PUBLIC: 0.05,
                 BuildingType.MIXED_USE: 0.05,
             }
-    
+
+    def _generate_vehicles(self, terrain_size: Tuple[float, float]):
+        """Generate vehicles moving on roads."""
+        if not self.landscape.roads:
+            return
+
+        vehicle_colors = [
+            (0.8, 0.2, 0.2),  # Red
+            (0.2, 0.2, 0.8),  # Blue
+            (0.2, 0.8, 0.2),  # Green
+            (0.8, 0.8, 0.2),  # Yellow
+            (0.8, 0.2, 0.8),  # Magenta
+            (0.3, 0.3, 0.3),  # Dark gray
+        ]
+
+        vehicle_id = 0
+
+        # Place vehicles only on main roads (reduced for performance)
+        for idx, road in enumerate(self.landscape.roads):
+            if road.road_type != RoadType.MAIN_ROAD:
+                continue
+
+            # Place 1-2 vehicles per main road (reduced from 2-3)
+            n_vehicles = random.randint(1, 2)
+            for _ in range(n_vehicles):
+                speed = random.uniform(15, 25)  # Units per second
+                position = random.uniform(0, 1)  # Random position on road
+                color = random.choice(vehicle_colors)
+
+                vehicle = Vehicle(
+                    id=f"vehicle_{vehicle_id:04d}",
+                    road_id=road.id,
+                    position=position,
+                    speed=speed,
+                    color=color
+                )
+                self.landscape.vehicles.append(vehicle)
+                vehicle_id += 1
+
     def _calculate_hotspot_influence(self, x: float, y: float) -> float:
         """Calculate how much a position is influenced by nearby hotspots."""
         if not self.landscape.hotspot_zones:

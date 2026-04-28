@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UHI Urban Landscape - Immersive 3D Visualization</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            z-index: 100;
+            max-width: 320px;
+            backdrop-filter: blur(10px);
+        }
+        #info h2 { margin-bottom: 15px; color: #ff6b6b; font-size: 1.4em; }
+        #info p { margin: 8px 0; font-size: 13px; line-height: 1.4; }
+        #info .stat { color: #4ecdc4; font-weight: bold; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+            z-index: 100;
+        }
+        #controls button {
+            display: block;
+            width: 100%;
+            margin: 8px 0;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+        .btn-primary { background: #4ecdc4; color: #1a1a2e; }
+        .btn-primary:hover { background: #3dbdb5; }
+        .btn-primary.active { background: #2db8a6; box-shadow: 0 0 12px #00ff88; border: 2px solid #00ff88; }
+        .btn-secondary { background: #444; color: white; }
+        .btn-secondary:hover { background: #555; }
+        .btn-vr { background: #ff6b6b; color: white; }
+        .btn-vr:hover { background: #ff5252; }
+        #legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+        }
+        .legend-item { display: flex; align-items: center; margin: 6px 0; }
+        .legend-color { width: 24px; height: 24px; margin-right: 12px; border-radius: 4px; }
+        #tooltip {
+            position: absolute;
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            display: none;
+            pointer-events: none;
+            z-index: 200;
+            font-size: 13px;
+            border: 1px solid #4ecdc4;
+        }
+        #stats {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 8px 0;
+            font-size: 13px;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background: #444;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+        .toggle-switch.active { background: #4ecdc4; }
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+        .toggle-switch.active::after { left: 22px; }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h2>🏙️ UHI Urban Landscape</h2>
+        <p><strong>Buildings:</strong> <span class="stat">80</span></p>
+        <p><strong>Trees:</strong> <span class="stat">74</span></p>
+        <p><strong>Hotspots:</strong> <span class="stat">100</span></p>
+        <p><strong>UHI Range:</strong> <span class="stat">-0.125 - 0.118°C</span></p>
+        <hr style="border-color: #333; margin: 15px 0;">
+        <p><strong>Controls:</strong></p>
+        <p>🖱️ Left drag: Rotate</p>
+        <p>🖱️ Right drag: Pan</p>
+        <p>🔍 Scroll: Zoom</p>
+    </div>
+    
+    <div id="controls">
+        <button class="btn-vr" id="vrButton">🥽 Enter VR</button>
+        <button class="btn-primary" id="resetCamera">📷 Reset View</button>
+        <button class="btn-secondary" id="toggleBuildings">🏢 Toggle Buildings</button>
+        <button class="btn-secondary" id="toggleTrees">🌳 Toggle Trees</button>
+        <button class="btn-secondary" id="toggleHeatmap">🔥 Toggle Heatmap</button>
+        <button class="btn-primary" id="toggleMitigation">🌱 Toggle Mitigation</button>
+        <div class="toggle-label">
+            <span>Day/Night</span>
+            <div class="toggle-switch" id="dayNightToggle"></div>
+        </div>
+    </div>
+
+    <div id="mitigationPanel" style="position: absolute; left: 10px; top: 350px; background: rgba(0,0,0,0.85); color: white; padding: 20px; border-radius: 12px; width: 320px; max-height: 300px; overflow-y: auto; z-index: 100; display: none; border: 1px solid #4ecdc4;">
+        <h3 style="color: #ff6b6b; margin-bottom: 12px;">📋 Mitigation Strategies</h3>
+        <div id="strategiesList"></div>
+        <button class="btn-secondary" style="margin-top: 15px; width: 100%;" onclick="document.getElementById('mitigationPanel').style.display='none';">Close</button>
+    </div>
+
+    <div id="tempReduction" style="position: absolute; left: 50%; bottom: 240px; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: white; padding: 15px; border-radius: 12px; z-index: 100; display: none; border: 1px solid #4ecdc4; font-size: 13px; white-space: nowrap;">
+        <h4 style="color: #4ecdc4; margin-bottom: 8px;">✓ Mitigation Active</h4>
+        <div id="tempStats"></div>
+    </div>
+    
+    <div id="legend">
+        <h3 style="margin-bottom: 12px;">Heat Intensity</h3>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff0000;"></div>
+            <span>Critical (>0.8)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff6600;"></div>
+            <span>High (0.6-0.8)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffcc00;"></div>
+            <span>Medium (0.4-0.6)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #66ff66;"></div>
+            <span>Low (<0.4)</span>
+        </div>
+    </div>
+    
+    <div id="stats"></div>
+    <div id="tooltip"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <script>
+        // Urban landscape data
+        const urbanData = {"buildings": [{"id": "building_0000", "position": {"x": 173.48345208773912, "y": 23.80814693911359, "z": 0}, "dimensions": {"width": 12.628045571607077, "depth": 15.543413228845642, "height": 11.009320048409094}, "type": "residential_mid", "rotation": 0, "floors": 3, "heat_exposure": 0.0, "color": {"r": 0.8, "g": 0.75, "b": 0.7}, "has_green_roof": "True", "roof_type": "flat", "window_density": 0.2930643573562959}, {"id": "building_0001", "position": {"x": 59.88707722893715, "y": 167.52381207166957, "z": 0}, "dimensions": {"width": 19.155805191529783, "depth": 17.157450806737724, "height": 16.76884509192874}, "type": "residential_mid", "rotation": 270, "floors": 5, "heat_exposure": 0.0, "color": {"r": 0.7, "g": 0.7, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.28612550484303556}, {"id": "building_0002", "position": {"x": 29.85306559330235, "y": 19.40693095760308, "z": 0}, "dimensions": {"width": 39.0626405852555, "depth": 38.81386191520616, "height": 6.6066134836167345}, "type": "industrial", "rotation": 0, "floors": 2, "heat_exposure": 0.3856664423911407, "color": {"r": 0.4863650370054618, "g": 0.5578499663586711, "b": 0.45084856996791356}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.531761865701198}, {"id": "building_0003", "position": {"x": 75.42888043316962, "y": 24.08394098597345, "z": 0}, "dimensions": {"width": 17.97871393907869, "depth": 13.599672551058186, "height": 19.996011746628493}, "type": "residential_mid", "rotation": 270, "floors": 6, "heat_exposure": 0.051819104281376704, "color": {"r": 0.7, "g": 0.7, "b": 0.75}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.5336441706563002}, {"id": "building_0004", "position": {"x": 69.17318355503403, "y": 93.793918153768, "z": 0}, "dimensions": {"width": 13.715765122253346, "depth": 13.623004198882622, "height": 5.822615544280811}, "type": "residential_low", "rotation": 270, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.4752647833733253}, {"id": "building_0005", "position": {"x": 112.69690238672244, "y": 140.29229413589056, "z": 0}, "dimensions": {"width": 11.001895543568333, "depth": 15.100250190352048, "height": 5.6894827233665355}, "type": "residential_low", "rotation": 270, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.38354074103495955}, {"id": "building_0006", "position": {"x": 80.96631603038425, "y": 47.325827001087134, "z": 0}, "dimensions": {"width": 10.797420044908964, "depth": 12.333206970480154, "height": 5.355854518959542}, "type": "residential_low", "rotation": 270, "floors": 1, "heat_exposure": 0.01678517790321854, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.5444411638666664}, {"id": "building_0007", "position": {"x": 182.62149898356222, "y": 133.86171970682355, "z": 0}, "dimensions": {"width": 13.255570088645202, "depth": 12.175065588991385, "height": 5}, "type": "residential_low", "rotation": 180, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.2446208694383506}, {"id": "building_0008", "position": {"x": 64.24043850461155, "y": 125.32040402339186, "z": 0}, "dimensions": {"width": 22.5818040009867, "depth": 17.772608329311502, "height": 15.613991817540477}, "type": "residential_mid", "rotation": 90, "floors": 5, "heat_exposure": 0.0, "color": {"r": 0.65, "g": 0.65, "b": 0.7}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.4157516120478503}, {"id": "building_0009", "position": {"x": 165.17582995379635, "y": 158.29101938934699, "z": 0}, "dimensions": {"width": 27.905822794252927, "depth": 24.247580079783294, "height": 10.285456965471438}, "type": "industrial", "rotation": 90, "floors": 3, "heat_exposure": 0.0, "color": {"r": 0.55, "g": 0.5, "b": 0.45}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.5512038396816162}, {"id": "building_0010", "position": {"x": 125.36711594473059, "y": 90.15929277620728, "z": 0}, "dimensions": {"width": 30.74830069019371, "depth": 41.02228490583441, "height": 8.080435179635257}, "type": "public", "rotation": 270, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.7, "g": 0.65, "b": 0.6}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.28987893481262295}, {"id": "building_0011", "position": {"x": 17.834300715805846, "y": 49.686819412705574, "z": 0}, "dimensions": {"width": 8.53522887348715, "depth": 7.961562731778623, "height": 6.8238109417205415}, "type": "residential_low", "rotation": 270, "floors": 2, "heat_exposure": 0.36603025773225517, "color": {"r": 0.6676431920102426, "g": 0.7329427231959029, "b": 0.637468474890914}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.48934102635238835}, {"id": "building_0012", "position": {"x": 140.18192252257973, "y": 130.5232987955026, "z": 0}, "dimensions": {"width": 24.591188388794954, "depth": 23.935751155265425, "height": 30.824674261503702}, "type": "commercial", "rotation": 0, "floors": 10, "heat_exposure": 0.0, "color": {"r": 0.35, "g": 0.4, "b": 0.45}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.49128543537647307}, {"id": "building_0013", "position": {"x": 29.21763483450555, "y": 80.34049570732796, "z": 0}, "dimensions": {"width": 24.177703395791013, "depth": 20.401759822331623, "height": 17.45058182694653}, "type": "commercial", "rotation": 0, "floors": 5, "heat_exposure": 0.0, "color": {"r": 0.45, "g": 0.45, "b": 0.5}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.5997129873650906}, {"id": "building_0014", "position": {"x": 125.08696884205331, "y": 55.7008746580961, "z": 0}, "dimensions": {"width": 17.034855855739544, "depth": 13.904202231371004, "height": 22.44761261359314}, "type": "mixed_use", "rotation": 270, "floors": 7, "heat_exposure": 0.0, "color": {"r": 0.6, "g": 0.55, "b": 0.5}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.37107476759227176}, {"id": "building_0015", "position": {"x": 115.1427241732825, "y": 34.70041118692926, "z": 0}, "dimensions": {"width": 16.47310951323984, "depth": 14.440364690994112, "height": 5}, "type": "residential_low", "rotation": 0, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.5595698546105898}, {"id": "building_0016", "position": {"x": 169.3857215222442, "y": 190.4508839676903, "z": 0}, "dimensions": {"width": 9.696550982066073, "depth": 10.059348868427215, "height": 5.368323303543077}, "type": "residential_low", "rotation": 270, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "True", "roof_type": "pitched", "window_density": 0.5697949180966182}, {"id": "building_0017", "position": {"x": 170.66450757067912, "y": 113.85997020959707, "z": 0}, "dimensions": {"width": 16.99623653083808, "depth": 16.838833451339628, "height": 16.970122546685076}, "type": "residential_mid", "rotation": 270, "floors": 5, "heat_exposure": 0.0, "color": {"r": 0.65, "g": 0.65, "b": 0.7}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.2590285380365193}, {"id": "building_0018", "position": {"x": 11.930123748160891, "y": 126.22905961762153, "z": 0}, "dimensions": {"width": 13.76557971909306, "depth": 16.258323691935534, "height": 12.11149761355825}, "type": "residential_mid", "rotation": 270, "floors": 4, "heat_exposure": 0.0, "color": {"r": 0.7, "g": 0.7, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.35164154567525585}, {"id": "building_0019", "position": {"x": 184.21939208525725, "y": 44.28317186178661, "z": 0}, "dimensions": {"width": 12.684176241332581, "depth": 14.672184010872398, "height": 5.700494378775182}, "type": "residential_low", "rotation": 90, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.4677835378479643}, {"id": "building_0020", "position": {"x": 144.75697035542296, "y": 28.787848286191277, "z": 0}, "dimensions": {"width": 19.474225428294844, "depth": 15.25752411483258, "height": 13.08177633271806}, "type": "residential_mid", "rotation": 180, "floors": 4, "heat_exposure": 0.0, "color": {"r": 0.7, "g": 0.7, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.5715548673628487}, {"id": "building_0021", "position": {"x": 160.2791711803685, "y": 51.96224257035618, "z": 0}, "dimensions": {"width": 17.65171291004632, "depth": 13.19213801629441, "height": 20.49351233690445}, "type": "residential_mid", "rotation": 180, "floors": 6, "heat_exposure": 0.0, "color": {"r": 0.65, "g": 0.65, "b": 0.7}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.5222111854584666}, {"id": "building_0022", "position": {"x": 175.81976962407364, "y": 89.0126843710604, "z": 0}, "dimensions": {"width": 19.98785731097531, "depth": 19.425827931890847, "height": 16.589661596538903}, "type": "residential_mid", "rotation": 180, "floors": 5, "heat_exposure": 0.0, "color": {"r": 0.8, "g": 0.75, "b": 0.7}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.40018887084717025}, {"id": "building_0023", "position": {"x": 116.38050915246376, "y": 9.633376486009656, "z": 0}, "dimensions": {"width": 11.983953811045225, "depth": 11.443366190325253, "height": 11.604688127073597}, "type": "residential_mid", "rotation": 180, "floors": 3, "heat_exposure": 0.0, "color": {"r": 0.65, "g": 0.65, "b": 0.7}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.38820032930065346}, {"id": "building_0024", "position": {"x": 102.38423262042475, "y": 179.38983992008465, "z": 0}, "dimensions": {"width": 36.6544667311226, "depth": 37.35563461565199, "height": 13.599767705913132}, "type": "industrial", "rotation": 270, "floors": 4, "heat_exposure": 0.0, "color": {"r": 0.45, "g": 0.45, "b": 0.45}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.27503301655781087}, {"id": "building_0025", "position": {"x": 29.45847160653984, "y": 189.46726743248968, "z": 0}, "dimensions": {"width": 13.665111901967395, "depth": 10.910135203772644, "height": 7.5461627036817704}, "type": "residential_low", "rotation": 90, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.75, "g": 0.7, "b": 0.65}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.420335602801068}, {"id": "building_0026", "position": {"x": 92.38623020717401, "y": 140.12206071805468, "z": 0}, "dimensions": {"width": 23.23126491587142, "depth": 19.630595480052488, "height": 11.741818235028612}, "type": "residential_mid", "rotation": 90, "floors": 3, "heat_exposure": 0.0, "color": {"r": 0.8, "g": 0.75, "b": 0.7}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.3354244936205727}, {"id": "building_0027", "position": {"x": 28.873440249887942, "y": 167.3734640458487, "z": 0}, "dimensions": {"width": 17.658641220013525, "depth": 16.14448831897615, "height": 14.915010707082672}, "type": "residential_mid", "rotation": 0, "floors": 4, "heat_exposure": 0.0, "color": {"r": 0.7, "g": 0.7, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.4355411688201769}, {"id": "building_0028", "position": {"x": 128.88449426540367, "y": 151.77159705355206, "z": 0}, "dimensions": {"width": 8.606330598936262, "depth": 7.513862484250762, "height": 5.436366714018075}, "type": "residential_low", "rotation": 90, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.75, "g": 0.7, "b": 0.65}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.3655254284707654}, {"id": "building_0029", "position": {"x": 88.28213522694939, "y": 92.55207291667924, "z": 0}, "dimensions": {"width": 16.27797962127027, "depth": 14.938791071021061, "height": 15.294897454473984}, "type": "residential_mid", "rotation": 180, "floors": 5, "heat_exposure": 0.0, "color": {"r": 0.7, "g": 0.7, "b": 0.75}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.36176915380209373}, {"id": "building_0030", "position": {"x": 76.67025317795913, "y": 71.96054753110319, "z": 0}, "dimensions": {"width": 18.082259969997413, "depth": 13.239963442717247, "height": 13.85027965145562}, "type": "residential_mid", "rotation": 180, "floors": 4, "heat_exposure": 0.0, "color": {"r": 0.8, "g": 0.75, "b": 0.7}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.5260148023000057}, {"id": "building_0031", "position": {"x": 65.12996736053633, "y": 48.95011596532151, "z": 0}, "dimensions": {"width": 9.765140583452128, "depth": 10.357324358847688, "height": 5}, "type": "residential_low", "rotation": 0, "floors": 1, "heat_exposure": 0.3962101451917994, "color": {"r": 0.7489664129760911, "g": 0.823772608711508, "b": 0.7101998294634366}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.230692400469382}, {"id": "building_0032", "position": {"x": 184.24944182552235, "y": 69.82911857386527, "z": 0}, "dimensions": {"width": 15.436210855139347, "depth": 12.560577429751412, "height": 5.829934144702395}, "type": "residential_low", "rotation": 270, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.5697241866507854}, {"id": "building_0033", "position": {"x": 5.005368988196978, "y": 51.905654777518336, "z": 0}, "dimensions": {"width": 10.010737976393957, "depth": 14.244787305577, "height": 6.754333662764085}, "type": "residential_low", "rotation": 0, "floors": 2, "heat_exposure": 0.04255394398991397, "color": {"r": 0.75, "g": 0.7, "b": 0.65}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.3937004520429437}, {"id": "building_0034", "position": {"x": 149.84835902587534, "y": 74.68126296256739, "z": 0}, "dimensions": {"width": 11.077956692927739, "depth": 11.14249559520659, "height": 6.902654221851936}, "type": "residential_low", "rotation": 0, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.3450095103777138}, {"id": "building_0035", "position": {"x": 100.01469456936744, "y": 14.791526964102776, "z": 0}, "dimensions": {"width": 11.374892755215095, "depth": 12.603691937871284, "height": 5.956135712789738}, "type": "residential_low", "rotation": 180, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.3827954237131496}, {"id": "building_0036", "position": {"x": 134.73446089821704, "y": 11.317124673025472, "z": 0}, "dimensions": {"width": 15.285117705132734, "depth": 12.649535632982918, "height": 16.27757324047121}, "type": "residential_mid", "rotation": 180, "floors": 5, "heat_exposure": 0.0, "color": {"r": 0.8, "g": 0.75, "b": 0.7}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.43105375834567317}, {"id": "building_0037", "position": {"x": 48.374443790644555, "y": 49.45715249362867, "z": 0}, "dimensions": {"width": 11.811081466404085, "depth": 10.816751462472396, "height": 5}, "type": "residential_low", "rotation": 270, "floors": 1, "heat_exposure": 0.7547416452068869, "color": {"r": 0.9102366762299903, "g": 0.8726990097166609, "b": 0.4488166188500489}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.24021796191093917}, {"id": "building_0038", "position": {"x": 189.5354086353714, "y": 110.8864918339708, "z": 0}, "dimensions": {"width": 8.597579775600982, "depth": 9.96495217791999, "height": 6.084920027359164}, "type": "residential_low", "rotation": 270, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.33210519744964195}, {"id": "building_0039", "position": {"x": 40.98446745973983, "y": 149.20052250713198, "z": 0}, "dimensions": {"width": 10.748602098387934, "depth": 11.993901291612847, "height": 6.228682805988322}, "type": "residential_low", "rotation": 90, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.75, "g": 0.7, "b": 0.65}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.3212752102524631}, {"id": "building_0040", "position": {"x": 98.32438174277783, "y": 113.92511570854951, "z": 0}, "dimensions": {"width": 13.668791417130773, "depth": 16.483295435300644, "height": 19.37702122664629}, "type": "residential_mid", "rotation": 180, "floors": 6, "heat_exposure": 0.0, "color": {"r": 0.7, "g": 0.7, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.346006214958095}, {"id": "building_0041", "position": {"x": 8.925358522669104, "y": 70.04880520203864, "z": 0}, "dimensions": {"width": 9.233762126880741, "depth": 9.133296871752782, "height": 7.39815942277406}, "type": "residential_low", "rotation": 90, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.2975651786207971}, {"id": "building_0042", "position": {"x": 41.34106761939985, "y": 126.60100375871843, "z": 0}, "dimensions": {"width": 14.104698548871504, "depth": 10.640543324632024, "height": 5}, "type": "residential_low", "rotation": 270, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "True", "roof_type": "pitched", "window_density": 0.5532389497677219}, {"id": "building_0043", "position": {"x": 150.3485276970902, "y": 109.39981529563025, "z": 0}, "dimensions": {"width": 10.662560307941012, "depth": 10.968499132738597, "height": 15.354380111260694}, "type": "residential_mid", "rotation": 0, "floors": 5, "heat_exposure": 0.0, "color": {"r": 0.7, "g": 0.7, "b": 0.75}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.5293131231990267}, {"id": "building_0044", "position": {"x": 61.365951492115, "y": 195.6458360019132, "z": 0}, "dimensions": {"width": 9.017523697668564, "depth": 8.445004730118246, "height": 7.830437651740711}, "type": "residential_low", "rotation": 180, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.3756279613533332}, {"id": "building_0045", "position": {"x": 155.85643397118042, "y": 190.61214004073764, "z": 0}, "dimensions": {"width": 10.55741746537783, "depth": 14.851919514854591, "height": 19.375091033688975}, "type": "residential_mid", "rotation": 180, "floors": 6, "heat_exposure": 0.0, "color": {"r": 0.65, "g": 0.65, "b": 0.7}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.33761364791595044}, {"id": "building_0046", "position": {"x": 100.07853615474328, "y": 59.57289072476256, "z": 0}, "dimensions": {"width": 11.478445368726316, "depth": 14.713687898951617, "height": 14.194939856359888}, "type": "residential_mid", "rotation": 270, "floors": 4, "heat_exposure": 0.0, "color": {"r": 0.7, "g": 0.7, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.27044014703199604}, {"id": "building_0047", "position": {"x": 161.2203246293253, "y": 132.13537246188938, "z": 0}, "dimensions": {"width": 9.674870947742175, "depth": 10.995715199700129, "height": 5}, "type": "residential_low", "rotation": 180, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.75, "g": 0.7, "b": 0.65}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.2838737137601997}, {"id": "building_0048", "position": {"x": 27.7417280570067, "y": 149.18343381358403, "z": 0}, "dimensions": {"width": 9.705496948681088, "depth": 8.765225014025068, "height": 6.211448062627911}, "type": "residential_low", "rotation": 90, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.25047439945541594}, {"id": "building_0049", "position": {"x": 29.904076194852372, "y": 60.611054683323694, "z": 0}, "dimensions": {"width": 9.16844451163937, "depth": 8.132400417118895, "height": 7.696735274075316}, "type": "residential_low", "rotation": 90, "floors": 2, "heat_exposure": 0.44508856048599865, "color": {"r": 0.7798260886687804, "g": 0.8700289852218699, "b": 0.7225072897643614}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.43475209936897075}, {"id": "building_0050", "position": {"x": 55.81620281841072, "y": 144.13840156088008, "z": 0}, "dimensions": {"width": 9.29827575730999, "depth": 10.620025431684422, "height": 6.056700362623281}, "type": "residential_low", "rotation": 180, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.3601000903913675}, {"id": "building_0051", "position": {"x": 58.89261473394198, "y": 6.55707030012439, "z": 0}, "dimensions": {"width": 12.371578440260318, "depth": 13.11414060024878, "height": 17.75836249347006}, "type": "residential_mid", "rotation": 180, "floors": 5, "heat_exposure": 0.01843183557517314, "color": {"r": 0.65, "g": 0.65, "b": 0.7}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.2827404995399594}, {"id": "building_0052", "position": {"x": 134.49267066461573, "y": 176.68456692541486, "z": 0}, "dimensions": {"width": 15.163009098822153, "depth": 17.9343154262717, "height": 19.795886222295938}, "type": "residential_mid", "rotation": 90, "floors": 6, "heat_exposure": 0.0, "color": {"r": 0.7, "g": 0.7, "b": 0.75}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.45475097394699276}, {"id": "building_0053", "position": {"x": 35.68140216730293, "y": 108.13475936246924, "z": 0}, "dimensions": {"width": 11.177257343187296, "depth": 11.171539495949682, "height": 5.716463563383862}, "type": "residential_low", "rotation": 0, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.4653337905761108}, {"id": "building_0054", "position": {"x": 7.7392428580870405, "y": 104.23493130160014, "z": 0}, "dimensions": {"width": 12.815190510350584, "depth": 12.120098620183919, "height": 11.480107379399735}, "type": "residential_mid", "rotation": 0, "floors": 3, "heat_exposure": 0.0, "color": {"r": 0.65, "g": 0.65, "b": 0.7}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.47510669471111044}, {"id": "building_0055", "position": {"x": 190.54672051829132, "y": 20.75161921996681, "z": 0}, "dimensions": {"width": 9.6341830377124, "depth": 8.188304132469092, "height": 5.852685557294253}, "type": "residential_low", "rotation": 270, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.3621803867402082}, {"id": "building_0056", "position": {"x": 82.24083668534686, "y": 7.459853271456488, "z": 0}, "dimensions": {"width": 15.0925600050094, "depth": 13.18175450170498, "height": 5}, "type": "residential_low", "rotation": 270, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.2289543882106816}, {"id": "building_0057", "position": {"x": 55.21969381798796, "y": 75.26949028413898, "z": 0}, "dimensions": {"width": 16.520378069958323, "depth": 14.9550795818172, "height": 12.81326729204531}, "type": "residential_mid", "rotation": 0, "floors": 4, "heat_exposure": 0.10500723173041526, "color": {"r": 0.65, "g": 0.65, "b": 0.7}, "has_green_roof": "True", "roof_type": "flat", "window_density": 0.46229974475921837}, {"id": "building_0058", "position": {"x": 191.41517317848007, "y": 151.86398565387765, "z": 0}, "dimensions": {"width": 10.996175464417357, "depth": 14.020799508404124, "height": 6.365072706183052}, "type": "residential_low", "rotation": 0, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.2353785402930716}, {"id": "building_0059", "position": {"x": 21.490289006090677, "y": 106.59637865045009, "z": 0}, "dimensions": {"width": 8.200887382758792, "depth": 9.498002796419684, "height": 7.650511250308102}, "type": "residential_low", "rotation": 0, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.4591170287225261}, {"id": "building_0060", "position": {"x": 7.479151990963354, "y": 189.27154768587548, "z": 0}, "dimensions": {"width": 12.784598091695747, "depth": 9.96775007557675, "height": 5.845478205846269}, "type": "residential_low", "rotation": 270, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.75, "g": 0.7, "b": 0.65}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.5999284438321577}, {"id": "building_0061", "position": {"x": 193.46735142455964, "y": 172.0648639053269, "z": 0}, "dimensions": {"width": 12.199504646683158, "depth": 11.182342059137326, "height": 5.109798537273924}, "type": "residential_low", "rotation": 0, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.75, "g": 0.7, "b": 0.65}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.5179592466045652}, {"id": "building_0062", "position": {"x": 8.145496483050257, "y": 158.34203874293905, "z": 0}, "dimensions": {"width": 12.663730399158743, "depth": 12.043239599566256, "height": 11.580168839248762}, "type": "residential_mid", "rotation": 180, "floors": 3, "heat_exposure": 0.0, "color": {"r": 0.8, "g": 0.75, "b": 0.7}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.47430512235351263}, {"id": "building_0063", "position": {"x": 159.92404445141207, "y": 7.976480267920335, "z": 0}, "dimensions": {"width": 8.31608029811075, "depth": 9.620833670792624, "height": 7.526208837006682}, "type": "residential_low", "rotation": 0, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.3302100797829909}, {"id": "building_0064", "position": {"x": 6.4493796378644825, "y": 83.2973437031871, "z": 0}, "dimensions": {"width": 12.898759275728965, "depth": 9.858654589709715, "height": 6.6268623850637125}, "type": "residential_low", "rotation": 270, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.75, "g": 0.7, "b": 0.65}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.448150595837538}, {"id": "building_0065", "position": {"x": 142.96397083543744, "y": 47.92725889517133, "z": 0}, "dimensions": {"width": 8.41325680752957, "depth": 9.716508975955998, "height": 5.514759743817301}, "type": "residential_low", "rotation": 90, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.5264590469088573}, {"id": "building_0066", "position": {"x": 51.987792370557074, "y": 103.32140211535759, "z": 0}, "dimensions": {"width": 14.33909258216354, "depth": 12.981532520528884, "height": 27.252270795693278}, "type": "mixed_use", "rotation": 180, "floors": 9, "heat_exposure": 0.0, "color": {"r": 0.6, "g": 0.55, "b": 0.5}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.22265927954298737}, {"id": "building_0067", "position": {"x": 191.08881687370732, "y": 188.89842696109272, "z": 0}, "dimensions": {"width": 14.849266531614171, "depth": 12.956590902980857, "height": 15.469907369181412}, "type": "residential_mid", "rotation": 180, "floors": 5, "heat_exposure": 0.0, "color": {"r": 0.7, "g": 0.7, "b": 0.75}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.4402315355381276}, {"id": "building_0068", "position": {"x": 56.736525907510384, "y": 27.554592850043534, "z": 0}, "dimensions": {"width": 7.488357469056823, "depth": 8.078265069898528, "height": 6.737035615244421}, "type": "residential_low", "rotation": 180, "floors": 2, "heat_exposure": 0.484105762079851, "color": {"r": 0.726553030669638, "g": 0.8290463457247911, "b": 0.6503095941252481}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.5720503000385929}, {"id": "building_0069", "position": {"x": 46.310797498632255, "y": 186.02873722763002, "z": 0}, "dimensions": {"width": 9.021611403690997, "depth": 8.192209640833955, "height": 6.127142329962404}, "type": "residential_low", "rotation": 90, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.75, "g": 0.7, "b": 0.65}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.3483336315215475}, {"id": "building_0070", "position": {"x": 32.84246149907022, "y": 48.066732051200134, "z": 0}, "dimensions": {"width": 11.135900377465337, "depth": 9.716879555091387, "height": 5}, "type": "residential_low", "rotation": 180, "floors": 1, "heat_exposure": 0.7253800931547953, "color": {"r": 0.8699833197952238, "g": 0.8775744381467607, "b": 0.45909585694964716}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.5815550067292088}, {"id": "building_0071", "position": {"x": 95.76907496468455, "y": 35.50708569650733, "z": 0}, "dimensions": {"width": 11.911235153358914, "depth": 14.093081912629671, "height": 7.445771574634236}, "type": "residential_low", "rotation": 90, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.75, "g": 0.7, "b": 0.65}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.3319520070626366}, {"id": "building_0072", "position": {"x": 3.545933774084486, "y": 9.923666572110768, "z": 0}, "dimensions": {"width": 7.091867548168972, "depth": 7.924405626504529, "height": 5.276989548220955}, "type": "residential_low", "rotation": 270, "floors": 1, "heat_exposure": 0.004243537123701188, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.510604664709671}, {"id": "building_0073", "position": {"x": 74.53591340606668, "y": 185.0982703158647, "z": 0}, "dimensions": {"width": 8.228194382919806, "depth": 7.308856213991713, "height": 5.861115167531834}, "type": "residential_low", "rotation": 0, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.75, "g": 0.7, "b": 0.65}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.5308276197364521}, {"id": "building_0074", "position": {"x": 14.23858938246149, "y": 142.49384122705467, "z": 0}, "dimensions": {"width": 7.531079710067083, "depth": 9.172474910968791, "height": 5.905053011343024}, "type": "residential_low", "rotation": 0, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.85, "g": 0.8, "b": 0.75}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.4548900055157506}, {"id": "building_0075", "position": {"x": 7.771839885420006, "y": 175.46343562562447, "z": 0}, "dimensions": {"width": 8.217996015630536, "depth": 9.54995881142564, "height": 8.362014093629856}, "type": "residential_low", "rotation": 180, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.2527259647226696}, {"id": "building_0076", "position": {"x": 25.7342940448383, "y": 127.60290281322494, "z": 0}, "dimensions": {"width": 7.79360482905725, "depth": 8.11206047649247, "height": 5.932213758375395}, "type": "residential_low", "rotation": 0, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.2892216809992777}, {"id": "building_0077", "position": {"x": 164.2584462947512, "y": 68.07670830762571, "z": 0}, "dimensions": {"width": 8.019356570038399, "depth": 10.28680486273473, "height": 6.4828199702730975}, "type": "residential_low", "rotation": 90, "floors": 2, "heat_exposure": 0.0, "color": {"r": 0.75, "g": 0.7, "b": 0.65}, "has_green_roof": "False", "roof_type": "flat", "window_density": 0.34702398411720503}, {"id": "building_0078", "position": {"x": 69.96368229268734, "y": 143.9897441100697, "z": 0}, "dimensions": {"width": 10.311681607859544, "depth": 12.76539541326897, "height": 10.948907787546373}, "type": "residential_mid", "rotation": 90, "floors": 3, "heat_exposure": 0.0, "color": {"r": 0.7, "g": 0.7, "b": 0.75}, "has_green_roof": "True", "roof_type": "flat", "window_density": 0.40307544455631733}, {"id": "building_0079", "position": {"x": 156.01576749762853, "y": 94.65227027852126, "z": 0}, "dimensions": {"width": 13.19472504141684, "depth": 11.85467503528247, "height": 5.405591911134219}, "type": "residential_low", "rotation": 90, "floors": 1, "heat_exposure": 0.0, "color": {"r": 0.9, "g": 0.85, "b": 0.8}, "has_green_roof": "False", "roof_type": "pitched", "window_density": 0.5428962222539735}], "trees": [{"id": "tree_0000", "position": {"x": 2, "y": 145.45323743444376, "z": 0}, "height": 9.936392094928301, "canopy_radius": 6.322513637925294, "trunk_radius": 0.49681960474641507, "type": "tree_deciduous", "color": {"r": 0.14018472159598416, "g": 0.4901847215959842, "b": 0.14018472159598416}, "cooling_effect": 0.6866663748744191}, {"id": "tree_0001", "position": {"x": 30.79941851461176, "y": 97.30581128235701, "z": 0}, "height": 13.250036927461302, "canopy_radius": 6.985246783674413, "trunk_radius": 0.6625018463730652, "type": "tree_deciduous", "color": {"r": 0.20836468880352482, "g": 0.5583646888035249, "b": 0.20836468880352482}, "cooling_effect": 0.590763371943578}, {"id": "tree_0002", "position": {"x": 2, "y": 127.26534693844664, "z": 0}, "height": 10.696060596859747, "canopy_radius": 4.150823475718999, "trunk_radius": 0.5348030298429873, "type": "tree_conifer", "color": {"r": 0.1753797785473157, "g": 0.5253797785473158, "b": 0.1753797785473157}, "cooling_effect": 0.7200985190213093}, {"id": "tree_0003", "position": {"x": 2, "y": 123.276227581975, "z": 0}, "height": 1.8069418080700537, "canopy_radius": 1.9480301120173535, "trunk_radius": 0.0903470904035027, "type": "shrub", "color": {"r": 0.2491950525796201, "g": 0.5991950525796201, "b": 0.2491950525796201}, "cooling_effect": 0.7426993807017446}, {"id": "tree_0004", "position": {"x": 47.632737563673416, "y": 163.10076021835238, "z": 0}, "height": 11.66804662673753, "canopy_radius": 2.6319683018562117, "trunk_radius": 0.5834023313368765, "type": "tree_deciduous", "color": {"r": 0.07350498014715032, "g": 0.4235049801471503, "b": 0.07350498014715032}, "cooling_effect": 0.550213738202043}, {"id": "tree_0005", "position": {"x": 17.128875308192114, "y": 165.6125305278309, "z": 0}, "height": 8.286700639915859, "canopy_radius": 7.5193182956866, "trunk_radius": 0.41433503199579297, "type": "tree_deciduous", "color": {"r": 0.05275601489817755, "g": 0.4027560148981776, "b": 0.05275601489817755}, "cooling_effect": 0.6351406854541738}, {"id": "tree_0006", "position": {"x": 2, "y": 76.28026269761074, "z": 0}, "height": 2.7557795480359744, "canopy_radius": 1.5253604145224637, "trunk_radius": 0.1377889774017987, "type": "shrub", "color": {"r": 0.20951116144112175, "g": 0.5595111614411218, "b": 0.20951116144112175}, "cooling_effect": 0.6666726659163617}, {"id": "tree_0007", "position": {"x": 2, "y": 132.6029994164791, "z": 0}, "height": 7.815516919550687, "canopy_radius": 2.011195488398005, "trunk_radius": 0.39077584597753434, "type": "tree_conifer", "color": {"r": 0.2433958268899929, "g": 0.5933958268899929, "b": 0.2433958268899929}, "cooling_effect": 0.6132875501268097}, {"id": "tree_0008", "position": {"x": 2, "y": 125.14964568839342, "z": 0}, "height": 8.88917898782308, "canopy_radius": 2.7847673914408135, "trunk_radius": 0.444458949391154, "type": "tree_conifer", "color": {"r": 0.1380727889145364, "g": 0.48807278891453637, "b": 0.1380727889145364}, "cooling_effect": 0.6279985038819045}, {"id": "tree_0009", "position": {"x": 32.25010797028184, "y": 93.54525866067908, "z": 0}, "height": 11.300937636316375, "canopy_radius": 3.2026600463718076, "trunk_radius": 0.5650468818158187, "type": "tree_deciduous", "color": {"r": 0.24332446813150135, "g": 0.5933244681315013, "b": 0.24332446813150135}, "cooling_effect": 0.5097384636568523}, {"id": "tree_0010", "position": {"x": 14.641566795531784, "y": 149.594478458833, "z": 0}, "height": 14.399020909163113, "canopy_radius": 4.822335898830929, "trunk_radius": 0.7199510454581557, "type": "tree_deciduous", "color": {"r": 0.11801034438766704, "g": 0.46801034438766703, "b": 0.11801034438766704}, "cooling_effect": 0.7434117415405903}, {"id": "tree_0011", "position": {"x": 2, "y": 118.25825503073116, "z": 0}, "height": 11.870128549795561, "canopy_radius": 4.395012522481315, "trunk_radius": 0.5935064274897781, "type": "tree_conifer", "color": {"r": 0.12029683157515224, "g": 0.47029683157515223, "b": 0.12029683157515224}, "cooling_effect": 0.5462060726438571}, {"id": "tree_0012", "position": {"x": 43.611376698427804, "y": 93.70796103847857, "z": 0}, "height": 1.1766964863812879, "canopy_radius": 1.7571421765351343, "trunk_radius": 0.058834824319064394, "type": "shrub", "color": {"r": 0.05379541562040105, "g": 0.40379541562040105, "b": 0.05379541562040105}, "cooling_effect": 0.6677333527289062}, {"id": "tree_0013", "position": {"x": 2, "y": 122.65162075040452, "z": 0}, "height": 9.055689420158338, "canopy_radius": 4.777148985000617, "trunk_radius": 0.4527844710079169, "type": "tree_conifer", "color": {"r": 0.1976226120961716, "g": 0.5476226120961716, "b": 0.1976226120961716}, "cooling_effect": 0.7460803245436062}, {"id": "tree_0014", "position": {"x": 2, "y": 114.55455513918756, "z": 0}, "height": 9.727207552622888, "canopy_radius": 6.295233152946994, "trunk_radius": 0.4863603776311444, "type": "tree_deciduous", "color": {"r": 0.0894667132517637, "g": 0.4394667132517637, "b": 0.0894667132517637}, "cooling_effect": 0.5313203853560398}, {"id": "tree_0015", "position": {"x": 14.580244606638642, "y": 94.01192960564941, "z": 0}, "height": 7.355177223931282, "canopy_radius": 3.489634204892801, "trunk_radius": 0.3677588611965641, "type": "tree_conifer", "color": {"r": 0.1477722293134765, "g": 0.49777222931347653, "b": 0.1477722293134765}, "cooling_effect": 0.6383647950612077}, {"id": "tree_0016", "position": {"x": 2, "y": 121.93055175920783, "z": 0}, "height": 7.526160266385904, "canopy_radius": 3.676998222436279, "trunk_radius": 0.37630801331929525, "type": "tree_deciduous", "color": {"r": 0.06438052089306509, "g": 0.4143805208930651, "b": 0.06438052089306509}, "cooling_effect": 0.7500347415556562}, {"id": "tree_0017", "position": {"x": 2, "y": 115.15093382664531, "z": 0}, "height": 11.026471179026068, "canopy_radius": 5.965555425136248, "trunk_radius": 0.5513235589513034, "type": "tree_deciduous", "color": {"r": 0.07605545996425836, "g": 0.42605545996425837, "b": 0.07605545996425836}, "cooling_effect": 0.5601452014024682}, {"id": "tree_0018", "position": {"x": 2, "y": 128.24725360036524, "z": 0}, "height": 5.232105148269519, "canopy_radius": 2.2249876279085328, "trunk_radius": 0.26160525741347596, "type": "tree_deciduous", "color": {"r": 0.09478876681594484, "g": 0.4447887668159448, "b": 0.09478876681594484}, "cooling_effect": 0.5318786740324921}, {"id": "tree_0019", "position": {"x": 3.5480826245994557, "y": 148.2782825135588, "z": 0}, "height": 14.802740616782007, "canopy_radius": 5.997565436913806, "trunk_radius": 0.7401370308391004, "type": "tree_deciduous", "color": {"r": 0.08125677221736413, "g": 0.43125677221736414, "b": 0.08125677221736413}, "cooling_effect": 0.5223757280294936}, {"id": "tree_0020", "position": {"x": 54.4857486881923, "y": 152.13495919832582, "z": 0}, "height": 5.680741642427413, "canopy_radius": 4.801307396243663, "trunk_radius": 0.28403708212137063, "type": "tree_conifer", "color": {"r": 0.20546747866164553, "g": 0.5554674786616456, "b": 0.20546747866164553}, "cooling_effect": 0.7722292300089765}, {"id": "tree_0021", "position": {"x": 2, "y": 91.92641443237412, "z": 0}, "height": 7.398389338468659, "canopy_radius": 4.717208589938452, "trunk_radius": 0.36991946692343297, "type": "tree_deciduous", "color": {"r": 0.09483434934961134, "g": 0.44483434934961136, "b": 0.09483434934961134}, "cooling_effect": 0.6984441658604239}, {"id": "tree_0022", "position": {"x": 2, "y": 134.87062036783615, "z": 0}, "height": 9.214157152175485, "canopy_radius": 5.455333695081389, "trunk_radius": 0.46070785760877425, "type": "tree_deciduous", "color": {"r": 0.2096877282663493, "g": 0.5596877282663493, "b": 0.2096877282663493}, "cooling_effect": 0.6702841465903163}, {"id": "tree_0023", "position": {"x": 2, "y": 134.70926219455006, "z": 0}, "height": 10.541504348390916, "canopy_radius": 7.936715080409421, "trunk_radius": 0.5270752174195458, "type": "tree_deciduous", "color": {"r": 0.07071166286553895, "g": 0.42071166286553896, "b": 0.07071166286553895}, "cooling_effect": 0.7532750466903779}, {"id": "tree_0024", "position": {"x": 2, "y": 130.5825629979337, "z": 0}, "height": 9.744802700951958, "canopy_radius": 2.2876247800932115, "trunk_radius": 0.4872401350475979, "type": "tree_conifer", "color": {"r": 0.24301264355561852, "g": 0.5930126435556186, "b": 0.24301264355561852}, "cooling_effect": 0.7027782101164851}, {"id": "tree_0025", "position": {"x": 7.916751352353131, "y": 24.422051039990787, "z": 0}, "height": 2.7349675393231356, "canopy_radius": 1.6866671483985858, "trunk_radius": 0.1367483769661568, "type": "shrub", "color": {"r": 0.13402019851554142, "g": 0.48402019851554146, "b": 0.13402019851554142}, "cooling_effect": 0.5188509561902286}, {"id": "tree_0026", "position": {"x": 2, "y": 20.714142760340078, "z": 0}, "height": 8.506681268286076, "canopy_radius": 4.958930260722932, "trunk_radius": 0.42533406341430385, "type": "tree_conifer", "color": {"r": 0.14576987752615275, "g": 0.49576987752615276, "b": 0.14576987752615275}, "cooling_effect": 0.7489859979253817}, {"id": "tree_0027", "position": {"x": 71.29994036414936, "y": 11.360714468233429, "z": 0}, "height": 11.185956548700403, "canopy_radius": 2.1531810500074076, "trunk_radius": 0.5592978274350202, "type": "tree_conifer", "color": {"r": 0.12653576314563236, "g": 0.4765357631456324, "b": 0.12653576314563236}, "cooling_effect": 0.545114213578408}, {"id": "tree_0028", "position": {"x": 22.386816193269283, "y": 61.26552391528756, "z": 0}, "height": 14.774861673819094, "canopy_radius": 6.099908262708526, "trunk_radius": 0.7387430836909548, "type": "tree_deciduous", "color": {"r": 0.12491949979897149, "g": 0.4749194997989715, "b": 0.12491949979897149}, "cooling_effect": 0.6596287240443651}, {"id": "tree_0029", "position": {"x": 45.13414768172647, "y": 41.70720527784404, "z": 0}, "height": 6.23674537744809, "canopy_radius": 4.968305692967561, "trunk_radius": 0.3118372688724045, "type": "tree_deciduous", "color": {"r": 0.10151356583599896, "g": 0.451513565835999, "b": 0.10151356583599896}, "cooling_effect": 0.5087942264547036}, {"id": "tree_0030", "position": {"x": 59.413859427761494, "y": 38.57624049928391, "z": 0}, "height": 10.526749071595646, "canopy_radius": 4.921843912284055, "trunk_radius": 0.5263374535797823, "type": "tree_deciduous", "color": {"r": 0.15659260519140306, "g": 0.506592605191403, "b": 0.15659260519140306}, "cooling_effect": 0.6894919192375821}, {"id": "tree_0031", "position": {"x": 37.98118672620871, "y": 66.11043042442705, "z": 0}, "height": 11.399846944033817, "canopy_radius": 7.288944327348184, "trunk_radius": 0.5699923472016909, "type": "tree_deciduous", "color": {"r": 0.1640752667476701, "g": 0.5140752667476701, "b": 0.1640752667476701}, "cooling_effect": 0.6423611117850012}, {"id": "tree_0032", "position": {"x": 2, "y": 37.5757074392394, "z": 0}, "height": 14.168065512406729, "canopy_radius": 5.9031062890822135, "trunk_radius": 0.7084032756203364, "type": "tree_deciduous", "color": {"r": 0.17676951359112955, "g": 0.5267695135911296, "b": 0.17676951359112955}, "cooling_effect": 0.5606553774737633}, {"id": "tree_0033", "position": {"x": 75.27145090448518, "y": 33.51817073332995, "z": 0}, "height": 8.610365389623494, "canopy_radius": 5.006444609611119, "trunk_radius": 0.4305182694811747, "type": "tree_deciduous", "color": {"r": 0.22788929540132294, "g": 0.5778892954013229, "b": 0.22788929540132294}, "cooling_effect": 0.634156164218957}, {"id": "tree_0034", "position": {"x": 7.33485556438584, "y": 38.89592173861267, "z": 0}, "height": 1.4207469650359899, "canopy_radius": 1.3413934783855592, "trunk_radius": 0.0710373482517995, "type": "shrub", "color": {"r": 0.2391674173005848, "g": 0.5891674173005848, "b": 0.2391674173005848}, "cooling_effect": 0.7733854308961443}, {"id": "tree_0035", "position": {"x": 20.15076333903903, "y": 42.148431022531625, "z": 0}, "height": 1.8069753626095861, "canopy_radius": 1.5278573518274068, "trunk_radius": 0.09034876813047932, "type": "shrub", "color": {"r": 0.11682402854072026, "g": 0.46682402854072025, "b": 0.11682402854072026}, "cooling_effect": 0.7268651935542642}, {"id": "tree_0036", "position": {"x": 2.2253195450703025, "y": 37.81663473174548, "z": 0}, "height": 2.3604001394261847, "canopy_radius": 1.1197501267600034, "trunk_radius": 0.11802000697130924, "type": "shrub", "color": {"r": 0.08198411554055543, "g": 0.43198411554055544, "b": 0.08198411554055543}, "cooling_effect": 0.5547000234704212}, {"id": "tree_0037", "position": {"x": 23.12209116304465, "y": 40.831470105614045, "z": 0}, "height": 8.768511681941389, "canopy_radius": 4.7504129854435995, "trunk_radius": 0.43842558409706944, "type": "tree_deciduous", "color": {"r": 0.14234414436452625, "g": 0.4923441443645263, "b": 0.14234414436452625}, "cooling_effect": 0.6091746567149945}, {"id": "tree_0038", "position": {"x": 5.43825060487443, "y": 42.54612930147096, "z": 0}, "height": 5.285804349718286, "canopy_radius": 2.1074378706280426, "trunk_radius": 0.2642902174859143, "type": "tree_conifer", "color": {"r": 0.14101374078945858, "g": 0.4910137407894586, "b": 0.14101374078945858}, "cooling_effect": 0.561495481643122}, {"id": "tree_0039", "position": {"x": 59.467182384514956, "y": 86.69000058089517, "z": 0}, "height": 1.4897162585237722, "canopy_radius": 1.6632202698728074, "trunk_radius": 0.07448581292618861, "type": "shrub", "color": {"r": 0.1279920664483139, "g": 0.47799206644831393, "b": 0.1279920664483139}, "cooling_effect": 0.7958084432549674}, {"id": "tree_0040", "position": {"x": 78.3382232608448, "y": 33.87479280981711, "z": 0}, "height": 2.145071922257544, "canopy_radius": 1.315450750265386, "trunk_radius": 0.1072535961128772, "type": "shrub", "color": {"r": 0.19848686395231432, "g": 0.5484868639523144, "b": 0.19848686395231432}, "cooling_effect": 0.5646836229204125}, {"id": "tree_0041", "position": {"x": 79.1649519663774, "y": 33.417400558105136, "z": 0}, "height": 12.384333172531822, "canopy_radius": 5.48697028862577, "trunk_radius": 0.6192166586265911, "type": "tree_deciduous", "color": {"r": 0.051015774674328634, "g": 0.40101577467432864, "b": 0.051015774674328634}, "cooling_effect": 0.7139737825651067}, {"id": "tree_0042", "position": {"x": 51.11714582441464, "y": 59.20443652996569, "z": 0}, "height": 10.202520158374469, "canopy_radius": 2.4768609599781626, "trunk_radius": 0.5101260079187234, "type": "tree_deciduous", "color": {"r": 0.21668100641977922, "g": 0.5666810064197793, "b": 0.21668100641977922}, "cooling_effect": 0.6946920820424649}, {"id": "tree_0043", "position": {"x": 119.23085729066807, "y": 124.00032501542766, "z": 0}, "height": 5.149315519003296, "canopy_radius": 3.801191616561731, "trunk_radius": 0.2574657759501648, "type": "tree_deciduous", "color": {"r": 0.22830657685567807, "g": 0.5783065768556781, "b": 0.22830657685567807}, "cooling_effect": 0.664101798075103}, {"id": "tree_0044", "position": {"x": 72.21042390568918, "y": 191.008056091606, "z": 0}, "height": 11.849300531400562, "canopy_radius": 2.0880548307336912, "trunk_radius": 0.5924650265700281, "type": "tree_deciduous", "color": {"r": 0.16944842434326865, "g": 0.5194484243432687, "b": 0.16944842434326865}, "cooling_effect": 0.5372674409071786}, {"id": "tree_0045", "position": {"x": 37.28011046195772, "y": 92.73059619115405, "z": 0}, "height": 5.82232502864142, "canopy_radius": 4.599145426780369, "trunk_radius": 0.29111625143207104, "type": "tree_deciduous", "color": {"r": 0.17559109569975428, "g": 0.5255910956997543, "b": 0.17559109569975428}, "cooling_effect": 0.4429130411595161}, {"id": "tree_0046", "position": {"x": 20.309927772369477, "y": 193.37287003242628, "z": 0}, "height": 8.153941549699333, "canopy_radius": 4.51209137441152, "trunk_radius": 0.40769707748496664, "type": "tree_deciduous", "color": {"r": 0.06567721614882532, "g": 0.41567721614882536, "b": 0.06567721614882532}, "cooling_effect": 0.6789483086219432}, {"id": "tree_0047", "position": {"x": 180.07886268847759, "y": 60.98746359017281, "z": 0}, "height": 1.0650653476508773, "canopy_radius": 1.2375138395283192, "trunk_radius": 0.05325326738254387, "type": "shrub", "color": {"r": 0.2435407177447017, "g": 0.5935407177447017, "b": 0.2435407177447017}, "cooling_effect": 0.6638173728011135}, {"id": "tree_0048", "position": {"x": 69.9316691329707, "y": 106.01458755452524, "z": 0}, "height": 11.40654602358816, "canopy_radius": 3.076746756809913, "trunk_radius": 0.570327301179408, "type": "tree_deciduous", "color": {"r": 0.20129743490301757, "g": 0.5512974349030175, "b": 0.20129743490301757}, "cooling_effect": 0.49416538953782035}, {"id": "tree_0049", "position": {"x": 136.36998169187703, "y": 153.70502376155434, "z": 0}, "height": 2.447634906757858, "canopy_radius": 1.3365434848164297, "trunk_radius": 0.12238174533789291, "type": "shrub", "color": {"r": 0.11768955676518175, "g": 0.46768955676518176, "b": 0.11768955676518175}, "cooling_effect": 0.316407472621436}, {"id": "tree_0050", "position": {"x": 100.35436186852004, "y": 77.98540020174951, "z": 0}, "height": 5.10425074973628, "canopy_radius": 4.125822188605525, "trunk_radius": 0.255212537486814, "type": "tree_conifer", "color": {"r": 0.10883423762395791, "g": 0.4588342376239579, "b": 0.10883423762395791}, "cooling_effect": 0.521762607341185}, {"id": "tree_0051", "position": {"x": 116.6999087105125, "y": 24.565219859897624, "z": 0}, "height": 10.15965951392906, "canopy_radius": 3.5312630587542486, "trunk_radius": 0.507982975696453, "type": "tree_conifer", "color": {"r": 0.07724605896235565, "g": 0.4272460589623557, "b": 0.07724605896235565}, "cooling_effect": 0.4021230646613444}, {"id": "tree_0052", "position": {"x": 81.81548875213932, "y": 58.93424123562818, "z": 0}, "height": 10.327053220475728, "canopy_radius": 5.774478880547777, "trunk_radius": 0.5163526610237864, "type": "tree_deciduous", "color": {"r": 0.22013474466349675, "g": 0.5701347446634968, "b": 0.22013474466349675}, "cooling_effect": 0.5382638839789654}, {"id": "tree_0053", "position": {"x": 72.77792739828878, "y": 155.63544151969379, "z": 0}, "height": 7.577871076960854, "canopy_radius": 2.997923787868846, "trunk_radius": 0.3788935538480427, "type": "tree_deciduous", "color": {"r": 0.15215592842966763, "g": 0.5021559284296676, "b": 0.15215592842966763}, "cooling_effect": 0.6435211541116328}, {"id": "tree_0054", "position": {"x": 154.08897793760997, "y": 60.8049154849165, "z": 0}, "height": 9.393097903404906, "canopy_radius": 4.80131522178263, "trunk_radius": 0.4696548951702453, "type": "tree_conifer", "color": {"r": 0.10430187936440685, "g": 0.45430187936440686, "b": 0.10430187936440685}, "cooling_effect": 0.5297695662792914}, {"id": "tree_0055", "position": {"x": 37.26425391813898, "y": 57.63888132839842, "z": 0}, "height": 6.517775763572757, "canopy_radius": 3.3421321320917774, "trunk_radius": 0.32588878817863787, "type": "tree_deciduous", "color": {"r": 0.22030517650910922, "g": 0.5703051765091092, "b": 0.22030517650910922}, "cooling_effect": 0.5946643191182454}, {"id": "tree_0056", "position": {"x": 118.84248218020561, "y": 122.67621123457957, "z": 0}, "height": 8.434869542530654, "canopy_radius": 5.140091057841952, "trunk_radius": 0.4217434771265327, "type": "tree_deciduous", "color": {"r": 0.11618678702817455, "g": 0.46618678702817457, "b": 0.11618678702817455}, "cooling_effect": 0.4456752377743882}, {"id": "tree_0057", "position": {"x": 182.71650726383214, "y": 167.7085676413167, "z": 0}, "height": 10.984600819110891, "canopy_radius": 4.7899119161887285, "trunk_radius": 0.5492300409555446, "type": "tree_deciduous", "color": {"r": 0.16272797188299765, "g": 0.5127279718829977, "b": 0.16272797188299765}, "cooling_effect": 0.615236846869509}, {"id": "tree_0058", "position": {"x": 45.31538587307326, "y": 178.72102491449527, "z": 0}, "height": 8.016480476612303, "canopy_radius": 2.7905221795454307, "trunk_radius": 0.40082402383061516, "type": "tree_conifer", "color": {"r": 0.1968475115168613, "g": 0.5468475115168613, "b": 0.1968475115168613}, "cooling_effect": 0.3083286326396587}, {"id": "tree_0059", "position": {"x": 61.02066469408035, "y": 155.31873713697095, "z": 0}, "height": 8.435733475034514, "canopy_radius": 4.03861994630118, "trunk_radius": 0.42178667375172574, "type": "tree_deciduous", "color": {"r": 0.12946015948123762, "g": 0.4794601594812376, "b": 0.12946015948123762}, "cooling_effect": 0.37893776239535}, {"id": "tree_0060", "position": {"x": 14.299726520591262, "y": 57.473250986181384, "z": 0}, "height": 9.854015397975635, "canopy_radius": 2.605874790466689, "trunk_radius": 0.49270076989878175, "type": "tree_deciduous", "color": {"r": 0.0706437937862223, "g": 0.4206437937862223, "b": 0.0706437937862223}, "cooling_effect": 0.662560820367601}, {"id": "tree_0061", "position": {"x": 132.05813182949396, "y": 41.89331577055387, "z": 0}, "height": 1.9673087105058948, "canopy_radius": 1.9705397699821217, "trunk_radius": 0.09836543552529475, "type": "shrub", "color": {"r": 0.20285796882899448, "g": 0.5528579688289945, "b": 0.20285796882899448}, "cooling_effect": 0.4659044936566789}, {"id": "tree_0062", "position": {"x": 122.10124526768764, "y": 150.69100688043673, "z": 0}, "height": 13.624730223467399, "canopy_radius": 6.3221167055266445, "trunk_radius": 0.68123651117337, "type": "tree_deciduous", "color": {"r": 0.055993858728918516, "g": 0.4059938587289185, "b": 0.055993858728918516}, "cooling_effect": 0.4669500701401601}, {"id": "tree_0063", "position": {"x": 142.63771514564576, "y": 59.565809662497905, "z": 0}, "height": 8.621560995235276, "canopy_radius": 7.642870763827233, "trunk_radius": 0.43107804976176384, "type": "tree_deciduous", "color": {"r": 0.1860985077493625, "g": 0.5360985077493625, "b": 0.1860985077493625}, "cooling_effect": 0.5236621687443852}, {"id": "tree_0064", "position": {"x": 142.7666674666158, "y": 91.53115923912753, "z": 0}, "height": 10.736783295064539, "canopy_radius": 5.53486215731999, "trunk_radius": 0.536839164753227, "type": "tree_deciduous", "color": {"r": 0.05924517032271083, "g": 0.40924517032271085, "b": 0.05924517032271083}, "cooling_effect": 0.6752517778160052}, {"id": "tree_0065", "position": {"x": 9.065175612333285, "y": 114.8477302440271, "z": 0}, "height": 2.966648139151653, "canopy_radius": 1.546321655439292, "trunk_radius": 0.14833240695758265, "type": "shrub", "color": {"r": 0.17924595725419634, "g": 0.5292459572541963, "b": 0.17924595725419634}, "cooling_effect": 0.30977751606559384}, {"id": "tree_0066", "position": {"x": 119.05458342539266, "y": 20.195587464967854, "z": 0}, "height": 6.2124808155445255, "canopy_radius": 2.4852902085907136, "trunk_radius": 0.3106240407772263, "type": "tree_deciduous", "color": {"r": 0.10700709379984077, "g": 0.4570070937998408, "b": 0.10700709379984077}, "cooling_effect": 0.3131913233133828}, {"id": "tree_0067", "position": {"x": 43.40598934538524, "y": 60.24222275266057, "z": 0}, "height": 8.638131869549884, "canopy_radius": 4.2580716778916345, "trunk_radius": 0.4319065934774942, "type": "tree_conifer", "color": {"r": 0.13244282569427018, "g": 0.48244282569427016, "b": 0.13244282569427018}, "cooling_effect": 0.48112231025778324}, {"id": "tree_0068", "position": {"x": 20.170188340369318, "y": 59.613450918526866, "z": 0}, "height": 8.044753656124428, "canopy_radius": 3.442203945176916, "trunk_radius": 0.4022376828062214, "type": "tree_conifer", "color": {"r": 0.07977985997189686, "g": 0.4297798599718969, "b": 0.07977985997189686}, "cooling_effect": 0.6264688265711917}, {"id": "tree_0069", "position": {"x": 40.04838071937258, "y": 136.10790552151818, "z": 0}, "height": 11.464332909844046, "canopy_radius": 7.28172384006065, "trunk_radius": 0.5732166454922023, "type": "tree_deciduous", "color": {"r": 0.13129301553907674, "g": 0.4812930155390767, "b": 0.13129301553907674}, "cooling_effect": 0.4769373196181156}, {"id": "tree_0070", "position": {"x": 155.83953395214797, "y": 66.14330441939458, "z": 0}, "height": 12.851395903882853, "canopy_radius": 5.897486014474238, "trunk_radius": 0.6425697951941427, "type": "tree_deciduous", "color": {"r": 0.21495776303818454, "g": 0.5649577630381846, "b": 0.21495776303818454}, "cooling_effect": 0.42094108543582603}, {"id": "tree_0071", "position": {"x": 78.08139162651455, "y": 89.38937990438399, "z": 0}, "height": 14.525848155089527, "canopy_radius": 5.02897543859548, "trunk_radius": 0.7262924077544763, "type": "tree_deciduous", "color": {"r": 0.21308949233570684, "g": 0.5630894923357068, "b": 0.21308949233570684}, "cooling_effect": 0.3868906616650762}, {"id": "tree_0072", "position": {"x": 157.46122982748733, "y": 122.85448439281492, "z": 0}, "height": 8.64296024793845, "canopy_radius": 5.30814583093766, "trunk_radius": 0.4321480123969226, "type": "tree_deciduous", "color": {"r": 0.21161724543148636, "g": 0.5616172454314864, "b": 0.21161724543148636}, "cooling_effect": 0.46135014388249035}, {"id": "tree_0073", "position": {"x": 130.10451808763932, "y": 40.4129040282205, "z": 0}, "height": 14.590838648886786, "canopy_radius": 6.50642107066079, "trunk_radius": 0.7295419324443393, "type": "tree_deciduous", "color": {"r": 0.20844775109578076, "g": 0.5584477510957808, "b": 0.20844775109578076}, "cooling_effect": 0.5333344005316627}], "roads": [{"id": "road_0000", "start": {"x": 0, "y": 60}, "end": {"x": 200, "y": 60}, "width": 12, "type": "main_road", "has_sidewalk": true, "is_asphalt": true, "heat_absorption": 0.8}, {"id": "road_0001", "start": {"x": 0, "y": 120}, "end": {"x": 200, "y": 120}, "width": 12, "type": "main_road", "has_sidewalk": true, "is_asphalt": true, "heat_absorption": 0.8}, {"id": "road_0002", "start": {"x": 0, "y": 180}, "end": {"x": 200, "y": 180}, "width": 12, "type": "main_road", "has_sidewalk": true, "is_asphalt": true, "heat_absorption": 0.8}, {"id": "road_0003", "start": {"x": 60, "y": 0}, "end": {"x": 60, "y": 200}, "width": 12, "type": "main_road", "has_sidewalk": true, "is_asphalt": true, "heat_absorption": 0.8}, {"id": "road_0004", "start": {"x": 120, "y": 0}, "end": {"x": 120, "y": 200}, "width": 12, "type": "main_road", "has_sidewalk": true, "is_asphalt": true, "heat_absorption": 0.8}, {"id": "road_0005", "start": {"x": 180, "y": 0}, "end": {"x": 180, "y": 200}, "width": 12, "type": "main_road", "has_sidewalk": true, "is_asphalt": true, "heat_absorption": 0.8}, {"id": "road_0006", "start": {"x": 0, "y": 30.0}, "end": {"x": 200, "y": 30.0}, "width": 8, "type": "street", "has_sidewalk": true, "is_asphalt": true, "heat_absorption": 0.8}, {"id": "road_0007", "start": {"x": 0, "y": 90.0}, "end": {"x": 200, "y": 90.0}, "width": 8, "type": "street", "has_sidewalk": true, "is_asphalt": true, "heat_absorption": 0.8}, {"id": "road_0008", "start": {"x": 0, "y": 150.0}, "end": {"x": 200, "y": 150.0}, "width": 8, "type": "street", "has_sidewalk": true, "is_asphalt": true, "heat_absorption": 0.8}, {"id": "road_0009", "start": {"x": 30.0, "y": 0}, "end": {"x": 30.0, "y": 200}, "width": 8, "type": "street", "has_sidewalk": true, "is_asphalt": true, "heat_absorption": 0.8}, {"id": "road_0010", "start": {"x": 90.0, "y": 0}, "end": {"x": 90.0, "y": 200}, "width": 8, "type": "street", "has_sidewalk": true, "is_asphalt": true, "heat_absorption": 0.8}, {"id": "road_0011", "start": {"x": 150.0, "y": 0}, "end": {"x": 150.0, "y": 200}, "width": 8, "type": "street", "has_sidewalk": true, "is_asphalt": true, "heat_absorption": 0.8}], "hotspot_zones": [{"id": "hotspot_0000", "center": {"x": 31.321841473695056, "y": 31.321841473695056}, "radius": 29.321841473695056, "intensity": 0.6440613824565019, "uhi_value": 0.03171157540733027, "color": {"r": 0.5762455298260076, "g": 1, "b": 0}}, {"id": "hotspot_0001", "center": {"x": 41.15349811054182, "y": 41.15349811054182}, "radius": 39.15349811054182, "intensity": 0.971783270351394, "uhi_value": 0.11148881098461108, "color": {"r": 1, "g": 0.11286691859442399, "b": 0}}, {"id": "hotspot_0002", "center": {"x": 39.637893567776715, "y": 39.637893567776715}, "radius": 37.637893567776715, "intensity": 0.9212631189258904, "uhi_value": 0.09919070649253356, "color": {"r": 1, "g": 0.31494752429643835, "b": 0}}, {"id": "hotspot_0003", "center": {"x": 28.26415929528993, "y": 28.26415929528993}, "radius": 26.26415929528993, "intensity": 0.542138643176331, "uhi_value": 0.006900555202162288, "color": {"r": 0.16855457270532392, "g": 1, "b": 0}}, {"id": "hotspot_0004", "center": {"x": 18.99311084688286, "y": 18.99311084688286}, "radius": 16.99311084688286, "intensity": 0.23310369489609534, "uhi_value": -0.06832772457166911, "color": {"r": 0, "g": 0.9324147795843813, "b": 1}}, {"id": "hotspot_0005", "center": {"x": 35.38327053184946, "y": 35.38327053184946}, "radius": 33.38327053184946, "intensity": 0.7794423510616488, "uhi_value": 0.0646673218009223, "color": {"r": 1, "g": 0.8822305957534047, "b": 0}}, {"id": "hotspot_0006", "center": {"x": 24.32101638808807, "y": 24.32101638808807}, "radius": 22.32101638808807, "intensity": 0.4107005462696023, "uhi_value": -0.02509537918022655, "color": {"r": 0, "g": 1, "b": 0.35719781492159086}}, {"id": "hotspot_0007", "center": {"x": 33.983952156291565, "y": 33.983952156291565}, "radius": 31.98395215629156, "intensity": 0.7327984052097187, "uhi_value": 0.053312800806350195, "color": {"r": 0.9311936208388749, "g": 1, "b": 0}}, {"id": "hotspot_0008", "center": {"x": 42.0, "y": 42.0}, "radius": 40.0, "intensity": 1.0, "uhi_value": 0.11835760056365577, "color": {"r": 1, "g": 0.0, "b": 0}}, {"id": "hotspot_0009", "center": {"x": 37.096789384923895, "y": 37.096789384923895}, "radius": 35.096789384923895, "intensity": 0.8365596461641299, "uhi_value": 0.07857136689292765, "color": {"r": 1, "g": 0.6537614153434803, "b": 0}}, {"id": "hotspot_0010", "center": {"x": 21.397108272441685, "y": 21.397108272441685}, "radius": 19.397108272441685, "intensity": 0.3132369424147229, "uhi_value": -0.04882091345834968, "color": {"r": 0, "g": 1, "b": 0.7470522303411085}}, {"id": "hotspot_0011", "center": {"x": 39.80952611780286, "y": 39.80952611780286}, "radius": 37.80952611780286, "intensity": 0.9269842039267622, "uhi_value": 0.10058338840585934, "color": {"r": 1, "g": 0.2920631842929513, "b": 0}}, {"id": "hotspot_0012", "center": {"x": 24.834993330173077, "y": 24.834993330173077}, "radius": 22.834993330173077, "intensity": 0.42783311100576926, "uhi_value": -0.020924804362109528, "color": {"r": 0, "g": 1, "b": 0.28866755597692295}}, {"id": "hotspot_0013", "center": {"x": 29.78981236831703, "y": 29.78981236831703}, "radius": 27.78981236831703, "intensity": 0.5929937456105676, "uhi_value": 0.0192801967124176, "color": {"r": 0.37197498244227045, "g": 1, "b": 0}}, {"id": "hotspot_0014", "center": {"x": 21.08094476611435, "y": 21.08094476611435}, "radius": 19.08094476611435, "intensity": 0.30269815887047835, "uhi_value": -0.05138636620521294, "color": {"r": 0, "g": 1, "b": 0.7892073645180866}}, {"id": "hotspot_0015", "center": {"x": 22.391316795396236, "y": 22.391316795396236}, "radius": 20.391316795396236, "intensity": 0.3463772265132079, "uhi_value": -0.04075358457590778, "color": {"r": 0, "g": 1, "b": 0.6144910939471684}}, {"id": "hotspot_0016", "center": {"x": 24.02316550618592, "y": 24.02316550618592}, "radius": 22.02316550618592, "intensity": 0.40077218353953065, "uhi_value": -0.027512237381249884, "color": {"r": 0, "g": 1, "b": 0.3969112658418774}}, {"id": "hotspot_0017", "center": {"x": 30.7972208204748, "y": 30.7972208204748}, "radius": 28.7972208204748, "intensity": 0.6265740273491599, "uhi_value": 0.027454634081307442, "color": {"r": 0.5062961093966396, "g": 1, "b": 0}}, {"id": "hotspot_0018", "center": {"x": 20.103876853215553, "y": 20.103876853215553}, "radius": 18.103876853215553, "intensity": 0.2701292284405184, "uhi_value": -0.05931461064473085, "color": {"r": 0, "g": 1, "b": 0.9194830862379264}}, {"id": "hotspot_0019", "center": {"x": 24.751650574077903, "y": 24.751650574077903}, "radius": 22.751650574077903, "intensity": 0.4250550191359301, "uhi_value": -0.02160107438782894, "color": {"r": 0, "g": 1, "b": 0.2997799234562797}}, {"id": "hotspot_0020", "center": {"x": 24.334851443288862, "y": 24.334851443288862}, "radius": 22.334851443288862, "intensity": 0.41116171477629543, "uhi_value": -0.02498311707641774, "color": {"r": 0, "g": 1, "b": 0.3553531408948183}}, {"id": "hotspot_0021", "center": {"x": 20.924728509261342, "y": 20.924728509261342}, "radius": 18.924728509261342, "intensity": 0.29749095030871137, "uhi_value": -0.052653955339403924, "color": {"r": 0, "g": 1, "b": 0.8100361987651545}}, {"id": "hotspot_0022", "center": {"x": 32.96876660157454, "y": 32.96876660157454}, "radius": 30.968766601574547, "intensity": 0.6989588867191515, "uhi_value": 0.045075257516871914, "color": {"r": 0.7958355468766061, "g": 1, "b": 0}}, {"id": "hotspot_0023", "center": {"x": 33.6004649078222, "y": 33.6004649078222}, "radius": 31.6004649078222, "intensity": 0.7200154969274066, "uhi_value": 0.05020106148386756, "color": {"r": 0.8800619877096265, "g": 1, "b": 0}}, {"id": "hotspot_0024", "center": {"x": 38.52191388818983, "y": 38.52191388818983}, "radius": 36.52191388818983, "intensity": 0.8840637962729941, "uhi_value": 0.09013528713785447, "color": {"r": 1, "g": 0.46374481490802344, "b": 0}}, {"id": "hotspot_0025", "center": {"x": 34.58071992664169, "y": 34.58071992664169}, "radius": 32.58071992664169, "intensity": 0.7526906642213896, "uhi_value": 0.05815516712961308, "color": {"r": 1, "g": 0.9892373431144414, "b": 0}}, {"id": "hotspot_0026", "center": {"x": 16.00357478147694, "y": 16.00357478147694}, "radius": 14.003574781476939, "intensity": 0.13345249271589796, "uhi_value": -0.092585785218624, "color": {"r": 0, "g": 0.5338099708635918, "b": 1}}, {"id": "hotspot_0027", "center": {"x": 30.047571048551227, "y": 30.047571048551227}, "radius": 28.047571048551227, "intensity": 0.6015857016183742, "uhi_value": 0.02137173384747846, "color": {"r": 0.40634280647349685, "g": 1, "b": 0}}, {"id": "hotspot_0028", "center": {"x": 35.300106876369355, "y": 35.300106876369355}, "radius": 33.300106876369355, "intensity": 0.7766702292123118, "uhi_value": 0.06399250505540663, "color": {"r": 1, "g": 0.8933190831507529, "b": 0}}, {"id": "hotspot_0029", "center": {"x": 19.75052072292248, "y": 19.75052072292248}, "radius": 17.75052072292248, "intensity": 0.2583506907640826, "uhi_value": -0.062181856348106836, "color": {"r": 0, "g": 1, "b": 0.9665972369436695}}, {"id": "hotspot_0030", "center": {"x": 33.5887833950416, "y": 33.5887833950416}, "radius": 31.588783395041602, "intensity": 0.7196261131680534, "uhi_value": 0.05010627391841249, "color": {"r": 0.8785044526722134, "g": 1, "b": 0}}, {"id": "hotspot_0031", "center": {"x": 30.899108174336, "y": 30.899108174336}, "radius": 28.899108174336, "intensity": 0.6299702724778666, "uhi_value": 0.02828138095943458, "color": {"r": 0.5198810899114665, "g": 1, "b": 0}}, {"id": "hotspot_0032", "center": {"x": 28.422924070217608, "y": 28.422924070217608}, "radius": 26.422924070217608, "intensity": 0.5474308023405869, "uhi_value": 0.008188823834664235, "color": {"r": 0.18972320936234777, "g": 1, "b": 0}}, {"id": "hotspot_0033", "center": {"x": 35.53052224119804, "y": 35.53052224119804}, "radius": 33.53052224119804, "intensity": 0.784350741373268, "uhi_value": 0.06586216970293632, "color": {"r": 1, "g": 0.862597034506928, "b": 0}}, {"id": "hotspot_0034", "center": {"x": 34.41735227003739, "y": 34.41735227003739}, "radius": 32.41735227003739, "intensity": 0.747245075667913, "uhi_value": 0.05682954922939222, "color": {"r": 0.9889803026716519, "g": 1, "b": 0}}, {"id": "hotspot_0035", "center": {"x": 36.31089179069012, "y": 36.31089179069012}, "radius": 34.31089179069012, "intensity": 0.8103630596896707, "uhi_value": 0.07219434012819777, "color": {"r": 1, "g": 0.7585477612413172, "b": 0}}, {"id": "hotspot_0036", "center": {"x": 29.911101208093704, "y": 29.911101208093704}, "radius": 27.911101208093704, "intensity": 0.5970367069364568, "uhi_value": 0.020264373509997685, "color": {"r": 0.3881468277458273, "g": 1, "b": 0}}, {"id": "hotspot_0037", "center": {"x": 28.458040462836163, "y": 28.458040462836163}, "radius": 26.458040462836163, "intensity": 0.5486013487612055, "uhi_value": 0.008473769579825405, "color": {"r": 0.1944053950448219, "g": 1, "b": 0}}, {"id": "hotspot_0038", "center": {"x": 34.56793975309941, "y": 34.56793975309941}, "radius": 32.56793975309941, "intensity": 0.752264658436647, "uhi_value": 0.05805146467609375, "color": {"r": 1, "g": 0.9909413662534119, "b": 0}}, {"id": "hotspot_0039", "center": {"x": 25.975811458133666, "y": 25.975811458133666}, "radius": 23.975811458133666, "intensity": 0.4658603819377889, "uhi_value": -0.011667837819558088, "color": {"r": 0, "g": 1, "b": 0.13655847224884443}}, {"id": "hotspot_0040", "center": {"x": 14.415858629263607, "y": 14.415858629263607}, "radius": 12.415858629263607, "intensity": 0.08052862097545353, "uhi_value": -0.10546902658715096, "color": {"r": 0, "g": 0.32211448390181413, "b": 1}}, {"id": "hotspot_0041", "center": {"x": 31.885240596488163, "y": 31.885240596488163}, "radius": 29.885240596488163, "intensity": 0.6628413532162721, "uhi_value": 0.036283177753027585, "color": {"r": 0.6513654128650885, "g": 1, "b": 0}}, {"id": "hotspot_0042", "center": {"x": 22.181713891212915, "y": 22.181713891212915}, "radius": 20.181713891212915, "intensity": 0.33939046304043047, "uhi_value": -0.042454370199568256, "color": {"r": 0, "g": 1, "b": 0.6424381478382781}}, {"id": "hotspot_0043", "center": {"x": 33.60667626715951, "y": 33.60667626715951}, "radius": 31.606676267159507, "intensity": 0.7202225422386502, "uhi_value": 0.050251462458536525, "color": {"r": 0.8808901689546009, "g": 1, "b": 0}}, {"id": "hotspot_0044", "center": {"x": 28.553993975248122, "y": 28.553993975248122}, "radius": 26.553993975248122, "intensity": 0.5517997991749374, "uhi_value": 0.00925236735300915, "color": {"r": 0.2071991966997495, "g": 1, "b": 0}}, {"id": "hotspot_0045", "center": {"x": 31.00118572461322, "y": 31.00118572461322}, "radius": 29.00118572461322, "intensity": 0.6333728574871073, "uhi_value": 0.02910967115267602, "color": {"r": 0.533491429948429, "g": 1, "b": 0}}, {"id": "hotspot_0046", "center": {"x": 26.658471826716713, "y": 26.658471826716713}, "radius": 24.658471826716713, "intensity": 0.48861572755722377, "uhi_value": -0.006128511228389643, "color": {"r": 0, "g": 1, "b": 0.04553708977110493}}, {"id": "hotspot_0047", "center": {"x": 26.48400623559516, "y": 26.48400623559516}, "radius": 24.48400623559516, "intensity": 0.48280020785317207, "uhi_value": -0.007544181351659676, "color": {"r": 0, "g": 1, "b": 0.06879916858731172}}, {"id": "hotspot_0048", "center": {"x": 36.369705926390026, "y": 36.369705926390026}, "radius": 34.369705926390026, "intensity": 0.8123235308796674, "uhi_value": 0.07267157701027319, "color": {"r": 1, "g": 0.7507058764813306, "b": 0}}, {"id": "hotspot_0049", "center": {"x": 27.528913970809604, "y": 27.528913970809604}, "radius": 25.528913970809604, "intensity": 0.5176304656936536, "uhi_value": 0.0009345373045953126, "color": {"r": 0.07052186277461425, "g": 1, "b": 0}}, {"id": "hotspot_0050", "center": {"x": 36.096996046611466, "y": 36.096996046611466}, "radius": 34.096996046611466, "intensity": 0.8032332015537155, "uhi_value": 0.07045872101591215, "color": {"r": 1, "g": 0.7870671937851381, "b": 0}}, {"id": "hotspot_0051", "center": {"x": 36.08061778252325, "y": 36.08061778252325}, "radius": 34.08061778252325, "intensity": 0.8026872594174416, "uhi_value": 0.07032582249425144, "color": {"r": 1, "g": 0.7892509623302337, "b": 0}}, {"id": "hotspot_0052", "center": {"x": 34.77403453100227, "y": 34.77403453100227}, "radius": 32.77403453100227, "intensity": 0.7591344843667425, "uhi_value": 0.05972378423070314, "color": {"r": 1, "g": 0.9634620625330301, "b": 0}}, {"id": "hotspot_0053", "center": {"x": 33.91901415612797, "y": 33.91901415612797}, "radius": 31.919014156127975, "intensity": 0.7306338052042658, "uhi_value": 0.05278587291125343, "color": {"r": 0.9225352208170632, "g": 1, "b": 0}}, {"id": "hotspot_0054", "center": {"x": 25.29366740161619, "y": 25.29366740161619}, "radius": 23.29366740161619, "intensity": 0.44312224672053974, "uhi_value": -0.01720297488796267, "color": {"r": 0, "g": 1, "b": 0.22751101311784105}}, {"id": "hotspot_0055", "center": {"x": 38.99847769063352, "y": 38.99847769063352}, "radius": 36.99847769063352, "intensity": 0.8999492563544506, "uhi_value": 0.09400227966408539, "color": {"r": 1, "g": 0.4002029745821978, "b": 0}}, {"id": "hotspot_0056", "center": {"x": 12.0, "y": 12.0}, "radius": 10.0, "intensity": 0.0, "uhi_value": -0.12507208333608788, "color": {"r": 0, "g": 0, "b": 1}}, {"id": "hotspot_0057", "center": {"x": 21.94209397406463, "y": 21.94209397406463}, "radius": 19.94209397406463, "intensity": 0.33140313246882097, "uhi_value": -0.044398723555817914, "color": {"r": 0, "g": 1, "b": 0.6743874701247161}}, {"id": "hotspot_0058", "center": {"x": 26.33595465631375, "y": 26.33595465631375}, "radius": 24.33595465631375, "intensity": 0.4778651552104583, "uhi_value": -0.00874551965650408, "color": {"r": 0, "g": 1, "b": 0.08853937915816679}}, {"id": "hotspot_0059", "center": {"x": 29.15538737417324, "y": 29.15538737417324}, "radius": 27.15538737417324, "intensity": 0.5718462458057747, "uhi_value": 0.014132267519666942, "color": {"r": 0.2873849832230988, "g": 1, "b": 0}}, {"id": "hotspot_0060", "center": {"x": 29.644112158234947, "y": 29.644112158234947}, "radius": 27.644112158234947, "intensity": 0.5881370719411649, "uhi_value": 0.018097938176270707, "color": {"r": 0.35254828776465974, "g": 1, "b": 0}}, {"id": "hotspot_0061", "center": {"x": 21.13785936448145, "y": 21.13785936448145}, "radius": 19.13785936448145, "intensity": 0.3045953121493816, "uhi_value": -0.05092454278222017, "color": {"r": 0, "g": 1, "b": 0.7816187514024735}}, {"id": "hotspot_0062", "center": {"x": 32.95899811666253, "y": 32.95899811666253}, "radius": 30.958998116662528, "intensity": 0.6986332705554176, "uhi_value": 0.04499599287706149, "color": {"r": 0.7945330822216703, "g": 1, "b": 0}}, {"id": "hotspot_0063", "center": {"x": 25.15272408771355, "y": 25.15272408771355}, "radius": 23.15272408771355, "intensity": 0.4384241362571184, "uhi_value": -0.018346634432999415, "color": {"r": 0, "g": 1, "b": 0.2463034549715264}}, {"id": "hotspot_0064", "center": {"x": 32.56599229367063, "y": 32.56599229367063}, "radius": 30.565992293670632, "intensity": 0.6855330764556877, "uhi_value": 0.04180701676833898, "color": {"r": 0.7421323058227509, "g": 1, "b": 0}}, {"id": "hotspot_0065", "center": {"x": 26.615922484467724, "y": 26.615922484467724}, "radius": 24.615922484467724, "intensity": 0.48719741614892415, "uhi_value": -0.006473770326183421, "color": {"r": 0, "g": 1, "b": 0.05121033540430342}}, {"id": "hotspot_0066", "center": {"x": 26.76037155316147, "y": 26.76037155316147}, "radius": 24.76037155316147, "intensity": 0.4920123851053823, "uhi_value": -0.005301663955125727, "color": {"r": 0, "g": 1, "b": 0.03195045957847076}}, {"id": "hotspot_0067", "center": {"x": 40.26946864851, "y": 40.26946864851}, "radius": 38.26946864851, "intensity": 0.9423156216170001, "uhi_value": 0.1043155105679289, "color": {"r": 1, "g": 0.23073751353199956, "b": 0}}, {"id": "hotspot_0068", "center": {"x": 27.630348029332673, "y": 27.630348029332673}, "radius": 25.630348029332673, "intensity": 0.5210116009777558, "uhi_value": 0.0017576059980265717, "color": {"r": 0.08404640391102314, "g": 1, "b": 0}}, {"id": "hotspot_0069", "center": {"x": 31.595583852347264, "y": 31.595583852347264}, "radius": 29.595583852347264, "intensity": 0.6531861284115755, "uhi_value": 0.033932809430839324, "color": {"r": 0.6127445136463021, "g": 1, "b": 0}}, {"id": "hotspot_0070", "center": {"x": 26.77367758288191, "y": 26.77367758288191}, "radius": 24.77367758288191, "intensity": 0.49245591942939704, "uhi_value": -0.005193694534832136, "color": {"r": 0, "g": 1, "b": 0.03017632228241185}}, {"id": "hotspot_0071", "center": {"x": 24.697250486565547, "y": 24.697250486565547}, "radius": 22.697250486565547, "intensity": 0.4232416828855182, "uhi_value": -0.02204249425807064, "color": {"r": 0, "g": 1, "b": 0.3070332684579271}}, {"id": "hotspot_0072", "center": {"x": 17.431569399363525, "y": 17.431569399363525}, "radius": 15.431569399363527, "intensity": 0.18105231331211757, "uhi_value": -0.08099857593720175, "color": {"r": 0, "g": 0.7242092532484703, "b": 1}}, {"id": "hotspot_0073", "center": {"x": 33.214698511741275, "y": 33.214698511741275}, "radius": 31.214698511741272, "intensity": 0.7071566170580424, "uhi_value": 0.04707082842196347, "color": {"r": 0.8286264682321698, "g": 1, "b": 0}}, {"id": "hotspot_0074", "center": {"x": 32.90357467681677, "y": 32.90357467681677}, "radius": 30.903574676816767, "intensity": 0.6967858225605589, "uhi_value": 0.04454626919565183, "color": {"r": 0.7871432902422355, "g": 1, "b": 0}}, {"id": "hotspot_0075", "center": {"x": 35.81800887348085, "y": 35.81800887348085}, "radius": 33.81800887348085, "intensity": 0.7939336291160283, "uhi_value": 0.0681949290370032, "color": {"r": 1, "g": 0.8242654835358869, "b": 0}}, {"id": "hotspot_0076", "center": {"x": 29.78184968465964, "y": 29.78184968465964}, "radius": 27.78184968465964, "intensity": 0.5927283228219881, "uhi_value": 0.019215584926893875, "color": {"r": 0.37091329128795225, "g": 1, "b": 0}}, {"id": "hotspot_0077", "center": {"x": 22.52066295535454, "y": 22.52066295535454}, "radius": 20.52066295535454, "intensity": 0.3506887651784846, "uhi_value": -0.03970402808149794, "color": {"r": 0, "g": 1, "b": 0.5972449392860617}}, {"id": "hotspot_0078", "center": {"x": 23.205659658504658, "y": 23.205659658504658}, "radius": 21.205659658504658, "intensity": 0.37352198861682184, "uhi_value": -0.03414574371749129, "color": {"r": 0, "g": 1, "b": 0.5059120455327126}}, {"id": "hotspot_0079", "center": {"x": 25.845753935409, "y": 25.845753935409}, "radius": 23.845753935409, "intensity": 0.4615251311803001, "uhi_value": -0.012723166541079706, "color": {"r": 0, "g": 1, "b": 0.15389947527879966}}, {"id": "hotspot_0080", "center": {"x": 33.53385406606251, "y": 33.53385406606251}, "radius": 31.53385406606251, "intensity": 0.717795135535417, "uhi_value": 0.04966055961207232, "color": {"r": 0.8711805421416678, "g": 1, "b": 0}}, {"id": "hotspot_0081", "center": {"x": 40.21532624189529, "y": 40.21532624189529}, "radius": 38.21532624189529, "intensity": 0.9405108747298431, "uhi_value": 0.10387618160366921, "color": {"r": 1, "g": 0.2379565010806277, "b": 0}}, {"id": "hotspot_0082", "center": {"x": 22.633407469478723, "y": 22.633407469478723}, "radius": 20.633407469478723, "intensity": 0.35444691564929076, "uhi_value": -0.03878918270034193, "color": {"r": 0, "g": 1, "b": 0.582212337402837}}, {"id": "hotspot_0083", "center": {"x": 22.739013659221282, "y": 22.739013659221282}, "radius": 20.739013659221282, "intensity": 0.35796712197404273, "uhi_value": -0.03793225998744568, "color": {"r": 0, "g": 1, "b": 0.5681315121038291}}, {"id": "hotspot_0084", "center": {"x": 30.75214729067937, "y": 30.75214729067937}, "radius": 28.75214729067937, "intensity": 0.625071576355979, "uhi_value": 0.02708889291096255, "color": {"r": 0.500286305423916, "g": 1, "b": 0}}, {"id": "hotspot_0085", "center": {"x": 24.414609447216456, "y": 24.414609447216456}, "radius": 22.414609447216456, "intensity": 0.41382031490721516, "uhi_value": -0.024335934886932115, "color": {"r": 0, "g": 1, "b": 0.34471874037113936}}, {"id": "hotspot_0086", "center": {"x": 24.053317456187138, "y": 24.053317456187138}, "radius": 22.053317456187138, "intensity": 0.4017772485395713, "uhi_value": -0.027267574725991298, "color": {"r": 0, "g": 1, "b": 0.39289100584171477}}, {"id": "hotspot_0087", "center": {"x": 32.123181531763066, "y": 32.123181531763066}, "radius": 30.123181531763066, "intensity": 0.6707727177254356, "uhi_value": 0.03821390730838685, "color": {"r": 0.6830908709017423, "g": 1, "b": 0}}, {"id": "hotspot_0088", "center": {"x": 41.306216296353796, "y": 41.306216296353796}, "radius": 39.306216296353796, "intensity": 0.9768738765451264, "uhi_value": 0.11272801564120943, "color": {"r": 1, "g": 0.09250449381949455, "b": 0}}, {"id": "hotspot_0089", "center": {"x": 33.4735037292871, "y": 33.4735037292871}, "radius": 31.473503729287103, "intensity": 0.7157834576429034, "uhi_value": 0.04917085749858966, "color": {"r": 0.8631338305716136, "g": 1, "b": 0}}, {"id": "hotspot_0090", "center": {"x": 37.01787180274836, "y": 37.01787180274836}, "radius": 35.01787180274836, "intensity": 0.8339290600916118, "uhi_value": 0.07793100415682354, "color": {"r": 1, "g": 0.6642837596335527, "b": 0}}, {"id": "hotspot_0091", "center": {"x": 30.537151209198377, "y": 30.537151209198377}, "radius": 28.537151209198377, "intensity": 0.6179050403066126, "uhi_value": 0.025344345305809188, "color": {"r": 0.47162016122645056, "g": 1, "b": 0}}, {"id": "hotspot_0092", "center": {"x": 33.3294697895022, "y": 33.3294697895022}, "radius": 31.329469789502195, "intensity": 0.7109823263167399, "uhi_value": 0.04800211961750049, "color": {"r": 0.8439293052669594, "g": 1, "b": 0}}, {"id": "hotspot_0093", "center": {"x": 34.26921645639532, "y": 34.26921645639532}, "radius": 32.26921645639532, "intensity": 0.7423072152131773, "uhi_value": 0.05562752741975485, "color": {"r": 0.9692288608527093, "g": 1, "b": 0}}, {"id": "hotspot_0094", "center": {"x": 36.14061717150598, "y": 36.14061717150598}, "radius": 34.14061717150598, "intensity": 0.8046872390501992, "uhi_value": 0.07081267690405958, "color": {"r": 1, "g": 0.7812510437992031, "b": 0}}, {"id": "hotspot_0095", "center": {"x": 31.832311123371078, "y": 31.832311123371078}, "radius": 29.832311123371078, "intensity": 0.6610770374457026, "uhi_value": 0.03585369092269849, "color": {"r": 0.6443081497828103, "g": 1, "b": 0}}, {"id": "hotspot_0096", "center": {"x": 24.13970238801744, "y": 24.13970238801744}, "radius": 22.13970238801744, "intensity": 0.40465674626724807, "uhi_value": -0.0265666195043529, "color": {"r": 0, "g": 1, "b": 0.3813730149310077}}, {"id": "hotspot_0097", "center": {"x": 25.686895986311423, "y": 25.686895986311423}, "radius": 23.686895986311423, "intensity": 0.45622986621038075, "uhi_value": -0.01401219121887255, "color": {"r": 0, "g": 1, "b": 0.175080535158477}}, {"id": "hotspot_0098", "center": {"x": 17.96709269560748, "y": 17.96709269560748}, "radius": 15.96709269560748, "intensity": 0.19890308985358265, "uhi_value": -0.07665316704634795, "color": {"r": 0, "g": 0.7956123594143306, "b": 1}}, {"id": "hotspot_0099", "center": {"x": 21.71794740587098, "y": 21.71794740587098}, "radius": 19.71794740587098, "intensity": 0.32393158019569934, "uhi_value": -0.04621752116390433, "color": {"r": 0, "g": 1, "b": 0.7042736792172026}}], "vehicles": [{"id": "vehicle_0000", "road_id": "road_0000", "position": 0.6676719262897944, "speed": 18.90472862260785, "width": 2.0, "height": 1.5, "length": 4.0, "color": {"r": 0.8, "g": 0.2, "b": 0.8}}, {"id": "vehicle_0001", "road_id": "road_0000", "position": 0.8973744446168481, "speed": 15.638764348532021, "width": 2.0, "height": 1.5, "length": 4.0, "color": {"r": 0.3, "g": 0.3, "b": 0.3}}, {"id": "vehicle_0002", "road_id": "road_0001", "position": 0.5765385015420786, "speed": 23.39782186888942, "width": 2.0, "height": 1.5, "length": 4.0, "color": {"r": 0.2, "g": 0.2, "b": 0.8}}, {"id": "vehicle_0003", "road_id": "road_0002", "position": 0.6499264585237544, "speed": 21.64989045054547, "width": 2.0, "height": 1.5, "length": 4.0, "color": {"r": 0.3, "g": 0.3, "b": 0.3}}, {"id": "vehicle_0004", "road_id": "road_0003", "position": 0.5601849369007746, "speed": 17.662896766044845, "width": 2.0, "height": 1.5, "length": 4.0, "color": {"r": 0.2, "g": 0.2, "b": 0.8}}, {"id": "vehicle_0005", "road_id": "road_0004", "position": 0.22655641636036628, "speed": 24.03315909597669, "width": 2.0, "height": 1.5, "length": 4.0, "color": {"r": 0.2, "g": 0.2, "b": 0.8}}, {"id": "vehicle_0006", "road_id": "road_0005", "position": 0.5579971505220079, "speed": 19.859703831896375, "width": 2.0, "height": 1.5, "length": 4.0, "color": {"r": 0.2, "g": 0.8, "b": 0.2}}], "terrain_size": {"width": 200, "depth": 200}, "metadata": {"source_data_rows": 100, "parameters": {"building_density": 3.580229115422793, "tree_density": 0.15528039922417333, "road_density": 0.4455744704025172, "green_ratio": 0.2791326892620092, "avg_building_height": 14.320916461691173, "asphalt_ratio": 0.21456326018237332, "greenroof_ratio": 0.04935038793099699, "park_grass_ratio": 0.3489158615775114}, "seed": 42, "scale_factor": 1.0}, "statistics": {"building_count": 80, "tree_count": 74, "road_count": 12, "hotspot_count": 100, "vehicle_count": 7}};
+        
+        // Scene setup
+        const scene = new THREE.Scene();
+        let isNightMode = false;
+        const dayBackground = new THREE.Color(0x87ceeb);
+        const nightBackground = new THREE.Color(0x0a0a1a);
+        scene.background = dayBackground;
+        scene.fog = new THREE.Fog(0x87ceeb, 100, 500);
+        
+        // Camera
+        const camera = new THREE.PerspectiveCamera(
+            60, window.innerWidth / window.innerHeight, 0.1, 2000
+        );
+        camera.position.set(150, 120, 150);
+        
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.xr.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        
+        // Controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2.1;
+        
+        // Groups for toggling
+        const buildingGroup = new THREE.Group();
+        const treeGroup = new THREE.Group();
+        const hotspotGroup = new THREE.Group();
+        const roadGroup = new THREE.Group();
+        const vehicleGroup = new THREE.Group();
+        scene.add(buildingGroup);
+        scene.add(treeGroup);
+        scene.add(hotspotGroup);
+        scene.add(roadGroup);
+        scene.add(vehicleGroup);
+        
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+        
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        sunLight.position.set(100, 200, 100);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 500;
+        sunLight.shadow.camera.left = -150;
+        sunLight.shadow.camera.right = 150;
+        sunLight.shadow.camera.top = 150;
+        sunLight.shadow.camera.bottom = -150;
+        scene.add(sunLight);
+        
+        // Hemisphere light for more natural lighting
+        const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x3d5c5c, 0.3);
+        scene.add(hemiLight);
+        
+        // Ground
+        const terrainSize = urbanData.terrain_size || {width: 200, depth: 200};
+        const groundGeometry = new THREE.PlaneGeometry(terrainSize.width, terrainSize.depth, 100, 100);
+        const groundMaterial = new THREE.MeshStandardMaterial({
+            color: 0x3d5c3d,
+            roughness: 0.9,
+            metalness: 0.1
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.set(terrainSize.width/2, -0.1, terrainSize.depth/2);
+        ground.receiveShadow = true;
+        scene.add(ground);
+        
+        // Interactive objects for raycasting
+        const interactiveObjects = [];
+        
+        // Create buildings
+        function createBuildings() {
+            if (!urbanData.buildings) return;
+            
+            urbanData.buildings.forEach((building, idx) => {
+                const width = building.dimensions?.width || 10;
+                const depth = building.dimensions?.depth || 10;
+                const height = building.dimensions?.height || 20;
+                
+                // Building body
+                const geometry = new THREE.BoxGeometry(width, height, depth);
+                
+                // Color based on heat exposure with smooth lerp
+                const heatExposure = building.heat_exposure || 0;
+                const baseColor = new THREE.Color(
+                    building.color?.r || 0.7,
+                    building.color?.g || 0.7,
+                    building.color?.b || 0.7
+                );
+                const hotColor = new THREE.Color(1.0, 0.2, 0.0);
+                const color = baseColor.clone().lerp(hotColor, heatExposure);
+
+                const material = new THREE.MeshStandardMaterial({
+                    color: color,
+                    emissive: color.clone(),
+                    emissiveIntensity: 0.1 + heatExposure * 0.5,
+                    roughness: 0.7,
+                    metalness: 0.1
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(
+                    building.position?.x || idx * 20,
+                    height / 2,
+                    building.position?.y || 0
+                );
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                mesh.userData = {
+                    type: 'building',
+                    id: building.id,
+                    buildingType: building.type,
+                    height: height,
+                    floors: building.floors || Math.floor(height/3),
+                    heatExposure: heatExposure,
+                    hasGreenRoof: building.has_green_roof
+                };
+                
+                buildingGroup.add(mesh);
+                interactiveObjects.push(mesh);
+                
+                // Add windows (simplified)
+                const windowDensity = building.window_density || 0.3;
+                if (windowDensity > 0.2 && height > 10) {
+                    addWindowsToBuilding(mesh, width, height, depth, windowDensity);
+                }
+                
+                // Green roof (added to mitigation group - only visible when mitigation is ON)
+                if (building.has_green_roof) {
+                    const roofGeometry = new THREE.BoxGeometry(width * 0.9, 0.5, depth * 0.9);
+                    const roofMaterial = new THREE.MeshStandardMaterial({color: 0x228b22});
+                    const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+                    roof.position.set(mesh.position.x, height + 0.25, mesh.position.z);
+                    roof.userData = { type: 'greenroof', buildingId: building.id };
+                    mitigationGroup.add(roof);
+                }
+            });
+        }
+        
+        function addWindowsToBuilding(building, width, height, depth, density) {
+            const windowGeometry = new THREE.PlaneGeometry(1.2, 1.5);
+            const windowMaterial = new THREE.MeshStandardMaterial({
+                color: 0x88ccff,
+                emissive: 0x88ccff,
+                emissiveIntensity: 0.2,
+                metalness: 0.9,
+                roughness: 0.1
+            });
+
+            const doorGeometry = new THREE.PlaneGeometry(1.0, 2.5);
+            const doorMaterial = new THREE.MeshStandardMaterial({
+                color: 0x663300,
+                metalness: 0.3,
+                roughness: 0.7
+            });
+
+            const floors = Math.floor(height / 4);
+            const windowsPerFloor = Math.floor(width / 3 * density);
+            const windowsPerDepth = Math.floor(depth / 3 * density);
+
+            // Windows on all 4 faces
+            for (let floor = 0; floor < floors; floor++) {
+                const yOffset = floor * 4 + 2.5;
+
+                // Front face (X-axis windows)
+                for (let w = 0; w < windowsPerFloor; w++) {
+                    const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                    const xOffset = (w - windowsPerFloor/2) * 3;
+                    windowMesh.position.set(
+                        building.position.x + xOffset,
+                        yOffset,
+                        building.position.z + depth/2 + 0.05
+                    );
+                    buildingGroup.add(windowMesh);
+                }
+
+                // Back face
+                for (let w = 0; w < windowsPerFloor; w++) {
+                    const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                    windowMesh.rotation.y = Math.PI;
+                    const xOffset = (w - windowsPerFloor/2) * 3;
+                    windowMesh.position.set(
+                        building.position.x + xOffset,
+                        yOffset,
+                        building.position.z - depth/2 - 0.05
+                    );
+                    buildingGroup.add(windowMesh);
+                }
+
+                // Left face (Z-axis windows)
+                for (let d = 0; d < windowsPerDepth; d++) {
+                    const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                    windowMesh.rotation.y = Math.PI / 2;
+                    const zOffset = (d - windowsPerDepth/2) * 3;
+                    windowMesh.position.set(
+                        building.position.x - width/2 - 0.05,
+                        yOffset,
+                        building.position.z + zOffset
+                    );
+                    buildingGroup.add(windowMesh);
+                }
+
+                // Right face
+                for (let d = 0; d < windowsPerDepth; d++) {
+                    const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                    windowMesh.rotation.y = -Math.PI / 2;
+                    const zOffset = (d - windowsPerDepth/2) * 3;
+                    windowMesh.position.set(
+                        building.position.x + width/2 + 0.05,
+                        yOffset,
+                        building.position.z + zOffset
+                    );
+                    buildingGroup.add(windowMesh);
+                }
+            }
+
+            // Doors at ground level (front and back)
+            const doorMesh1 = new THREE.Mesh(doorGeometry, doorMaterial);
+            doorMesh1.position.set(
+                building.position.x,
+                1.2,
+                building.position.z + depth/2 + 0.05
+            );
+            buildingGroup.add(doorMesh1);
+
+            const doorMesh2 = new THREE.Mesh(doorGeometry, doorMaterial);
+            doorMesh2.rotation.y = Math.PI;
+            doorMesh2.position.set(
+                building.position.x,
+                1.2,
+                building.position.z - depth/2 - 0.05
+            );
+            buildingGroup.add(doorMesh2);
+        }
+        
+        // Create trees
+        function createTrees() {
+            if (!urbanData.trees) return;
+            
+            urbanData.trees.forEach((tree, idx) => {
+                const height = tree.height || 8;
+                const canopyRadius = tree.canopy_radius || 3;
+                const trunkRadius = tree.trunk_radius || 0.3;
+                
+                // Trunk
+                const trunkGeometry = new THREE.CylinderGeometry(
+                    trunkRadius, trunkRadius * 1.2, height * 0.4, 8
+                );
+                const trunkMaterial = new THREE.MeshStandardMaterial({color: 0x4a3728});
+                const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                trunk.position.set(
+                    tree.position?.x || idx * 10,
+                    height * 0.2,
+                    tree.position?.y || 0
+                );
+                trunk.castShadow = true;
+                treeGroup.add(trunk);
+                
+                // Canopy
+                const canopyGeometry = new THREE.SphereGeometry(canopyRadius, 8, 6);
+                const canopyColor = new THREE.Color(
+                    tree.color?.r || 0.2,
+                    tree.color?.g || 0.6,
+                    tree.color?.b || 0.2
+                );
+                const canopyMaterial = new THREE.MeshStandardMaterial({
+                    color: canopyColor,
+                    roughness: 0.8
+                });
+                const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
+                canopy.position.set(
+                    trunk.position.x,
+                    height * 0.6,
+                    trunk.position.z
+                );
+                canopy.scale.y = 0.7;
+                canopy.castShadow = true;
+                canopy.userData = {
+                    type: 'tree',
+                    id: tree.id,
+                    treeType: tree.type,
+                    height: height,
+                    coolingEffect: tree.cooling_effect || 0.5
+                };
+                treeGroup.add(canopy);
+                interactiveObjects.push(canopy);
+            });
+        }
+        
+        // Create roads
+        function createRoads() {
+            if (!urbanData.roads) return;
+            
+            urbanData.roads.forEach((road) => {
+                const start = new THREE.Vector3(road.start?.x || 0, 0.05, road.start?.y || 0);
+                const end = new THREE.Vector3(road.end?.x || 100, 0.05, road.end?.y || 0);
+                
+                const direction = end.clone().sub(start);
+                const length = direction.length();
+                const width = road.width || 6;
+                
+                const roadGeometry = new THREE.PlaneGeometry(length, width);
+                const roadMaterial = new THREE.MeshStandardMaterial({
+                    color: road.is_asphalt ? 0x333333 : 0x666666,
+                    roughness: 0.9
+                });
+                
+                const roadMesh = new THREE.Mesh(roadGeometry, roadMaterial);
+                roadMesh.rotation.x = -Math.PI / 2;
+                
+                const midpoint = start.clone().add(end).multiplyScalar(0.5);
+                roadMesh.position.copy(midpoint);
+                
+                const angle = Math.atan2(direction.z, direction.x);
+                roadMesh.rotation.z = angle;
+                
+                roadMesh.receiveShadow = true;
+                roadGroup.add(roadMesh);
+            });
+        }
+
+        // Create vehicles moving on roads
+        function createVehicles() {
+            if (!urbanData.vehicles || !urbanData.roads) return;
+
+            const roadMap = new Map();
+            urbanData.roads.forEach(road => roadMap.set(road.id, road));
+
+            urbanData.vehicles.forEach((vehicle) => {
+                const road = roadMap.get(vehicle.road_id);
+                if (!road) return;
+
+                // Vehicle dimensions
+                const width = vehicle.width || 2.0;
+                const height = vehicle.height || 1.5;
+                const length = vehicle.length || 4.0;
+
+                // Create main vehicle body group
+                const vehicleGroup_item = new THREE.Group();
+
+                // Main car body (lower part)
+                const bodyLowGeometry = new THREE.BoxGeometry(width, height * 0.6, length * 0.85);
+                const bodyMaterial = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color(
+                        vehicle.color?.r || 0.2,
+                        vehicle.color?.g || 0.2,
+                        vehicle.color?.b || 0.2
+                    ),
+                    metalness: 0.6,
+                    roughness: 0.4
+                });
+                const bodyLow = new THREE.Mesh(bodyLowGeometry, bodyMaterial);
+                bodyLow.position.y = height * 0.3;
+                bodyLow.castShadow = true;
+                vehicleGroup_item.add(bodyLow);
+
+                // Car cabin/roof (upper part)
+                const cabinGeometry = new THREE.BoxGeometry(width * 0.85, height * 0.5, length * 0.5);
+                const cabin = new THREE.Mesh(cabinGeometry, bodyMaterial);
+                cabin.position.y = height * 0.9;
+                cabin.position.z = -length * 0.1;
+                cabin.castShadow = true;
+                vehicleGroup_item.add(cabin);
+
+                // Windows - front
+                const windowGeometry = new THREE.BoxGeometry(width * 0.7, height * 0.35, 0.03);
+                const windowMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x4488ff,
+                    transparent: true,
+                    opacity: 0.5,
+                    metalness: 0.9,
+                    roughness: 0.1
+                });
+
+                const frontWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+                frontWindow.position.y = height * 0.95;
+                frontWindow.position.z = -length * 0.15;
+                vehicleGroup_item.add(frontWindow);
+
+                // Windows - rear
+                const rearWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+                rearWindow.position.y = height * 0.95;
+                rearWindow.position.z = length * 0.05;
+                vehicleGroup_item.add(rearWindow);
+
+                // Wheels (simple cylinders for performance)
+                const wheelRadius = width * 0.35;
+                const wheelGeometry = new THREE.CylinderGeometry(wheelRadius, wheelRadius, width * 0.4, 8);
+                const wheelMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x222222,
+                    metalness: 0.3,
+                    roughness: 0.8
+                });
+
+                // Front wheels
+                for (let side = -1; side <= 1; side += 2) {
+                    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                    wheel.rotation.z = Math.PI / 2;
+                    wheel.position.set(side * (width / 2 + 0.2), wheelRadius * 0.8, length * 0.25);
+                    wheel.castShadow = true;
+                    vehicleGroup_item.add(wheel);
+                }
+
+                // Rear wheels
+                for (let side = -1; side <= 1; side += 2) {
+                    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                    wheel.rotation.z = Math.PI / 2;
+                    wheel.position.set(side * (width / 2 + 0.2), wheelRadius * 0.8, -length * 0.25);
+                    wheel.castShadow = true;
+                    vehicleGroup_item.add(wheel);
+                }
+
+                vehicleGroup_item.userData = {
+                    type: 'vehicle',
+                    id: vehicle.id,
+                    road_id: vehicle.road_id,
+                    position: vehicle.position,
+                    speed: vehicle.speed,
+                    roadData: road
+                };
+
+                vehicleGroup.add(vehicleGroup_item);
+            });
+        }
+
+        // Create mitigation visualizations (wind arrows + canopy spreads)
+        const mitigationGroup = new THREE.Group();
+        function createMitigation() {
+            if (!urbanData.hotspot_zones) return;
+
+            urbanData.hotspot_zones.forEach((zone, idx) => {
+                const intensity = zone.intensity || 0.5;
+                const radius = zone.radius || 20;
+                const centerX = zone.center?.x || idx * 30;
+                const centerY = zone.center?.y || idx * 30;
+
+                // Canopy spread rings for trees near hotspot (shows tree cooling zones)
+                if (urbanData.trees) {
+                    urbanData.trees.forEach((tree) => {
+                        const tx = tree.position?.x || 0;
+                        const ty = tree.position?.y || 0;
+                        const dist = Math.hypot(tx - centerX, ty - centerY);
+                        if (dist < radius * 1.4 && dist > radius * 0.3) {
+                            const canopyR = tree.canopy_radius || 3;
+                            const spreadGeo = new THREE.RingGeometry(canopyR, canopyR * 1.8, 32);
+                            const spreadMat = new THREE.MeshBasicMaterial({
+                                color: 0x44aa44, transparent: true, opacity: 0.18,
+                                side: THREE.DoubleSide
+                            });
+                            const spread = new THREE.Mesh(spreadGeo, spreadMat);
+                            spread.rotation.x = -Math.PI / 2;
+                            spread.position.set(tx, 0.15, ty);
+                            mitigationGroup.add(spread);
+
+                            // Elevated shade disk
+                            const shadeDisk = new THREE.CircleGeometry(canopyR * 1.4, 32);
+                            const shadeMat = new THREE.MeshBasicMaterial({
+                                color: 0x228833, transparent: true, opacity: 0.12
+                            });
+                            const shade = new THREE.Mesh(shadeDisk, shadeMat);
+                            shade.rotation.x = -Math.PI / 2;
+                            shade.position.set(tx, tree.height || 8, ty);
+                            mitigationGroup.add(shade);
+                        }
+                    });
+                }
+            });
+
+            scene.add(mitigationGroup);
+            mitigationGroup.visible = false;
+        }
+
+        function toggleMitigation() {
+            const btn = document.getElementById('toggleMitigation');
+            mitigationGroup.visible = !mitigationGroup.visible;
+
+            if (mitigationGroup.visible) {
+                // MITIGATION ON: Reduce heat, cool colors, shrink hotspots
+                btn.classList.add('active');
+
+                // Cool down buildings (maintain definition)
+                buildingGroup.children.forEach(b => {
+                    if (b.material.emissiveIntensity) {
+                        b.userData.originalIntensity = b.material.emissiveIntensity;
+                        b.userData.originalColor = b.material.color.clone();
+                        b.material.emissiveIntensity -= 0.15;
+                        // Slight color shift to maintain building definition
+                        b.material.color.lerp(new THREE.Color(0x6ebdd4), 0.08);
+                    }
+                });
+
+                // Cool down hotspots: reduce radius, glow, and change to cool colors
+                hotspotHalos.forEach(halo => {
+                    if (halo.userData.phase !== undefined && halo.material) {
+                        // Scale down hotspot radius to 50%
+                        halo.userData.originalScale = halo.scale.x || 1.0;
+                        halo.scale.set(0.5, 0.5, 0.5);
+
+                        halo.userData.originalOpacity = halo.material.opacity;
+                        // Reduce opacity by 60% for cooling effect
+                        halo.material.opacity *= 0.4;
+                        // Change color to cool blue-cyan
+                        if (halo.material.color) {
+                            halo.userData.originalColor = halo.material.color.clone();
+                            halo.material.color.copy(new THREE.Color(0x00ccff));
+                        }
+                    }
+                });
+
+                // Reduce point light intensity
+                hotspotGroup.children.forEach(child => {
+                    if (child.isLight) {
+                        child.userData.originalIntensity = child.intensity;
+                        child.intensity *= 0.3;
+                        child.color.set(0x00ccff); // Cool cyan light
+                    }
+                });
+            } else {
+                // MITIGATION OFF: Restore heat visualization
+                btn.classList.remove('active');
+
+                buildingGroup.children.forEach(b => {
+                    if (b.userData.originalIntensity) {
+                        b.material.emissiveIntensity = b.userData.originalIntensity;
+                        if (b.userData.originalColor) {
+                            b.material.color.copy(b.userData.originalColor);
+                        }
+                    }
+                });
+
+                // Restore hotspot sizes, opacity, and colors
+                hotspotHalos.forEach(halo => {
+                    // Restore original radius
+                    halo.scale.set(halo.userData.originalScale, halo.userData.originalScale, halo.userData.originalScale);
+
+                    if (halo.userData.originalOpacity) {
+                        halo.material.opacity = halo.userData.originalOpacity;
+                        if (halo.userData.originalColor) {
+                            halo.material.color.copy(halo.userData.originalColor);
+                        }
+                    }
+                });
+
+                hotspotGroup.children.forEach(child => {
+                    if (child.isLight && child.userData.originalIntensity) {
+                        child.intensity = child.userData.originalIntensity;
+                        child.color.set(0xff4400); // Restore hot orange
+                    }
+                });
+            }
+        }
+
+        // Track hotspot halos and rings for scaling on mitigation toggle
+        const hotspotHalos = [];
+
+        // Create hotspot zones with ground halos and pulsing glow rings
+        function createHotspots() {
+            if (!urbanData.hotspot_zones) return;
+
+            urbanData.hotspot_zones.forEach((zone, idx) => {
+                const intensity = zone.intensity || 0.5;
+                const radius = zone.radius || 20;
+                const centerX = zone.center?.x || idx * 30;
+                const centerY = zone.center?.y || idx * 30;
+
+                const color = new THREE.Color(1.0, 0.267, 0.0);
+
+                // Ground-level heat halo (filled circle on ground)
+                const haloGeometry = new THREE.CircleGeometry(radius, 64);
+                const haloMaterial = new THREE.MeshBasicMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: 0.4,
+                    side: THREE.DoubleSide
+                });
+                const halo = new THREE.Mesh(haloGeometry, haloMaterial);
+                halo.rotation.x = -Math.PI / 2;
+                halo.position.set(centerX, 0.05, centerY);
+                halo.userData = { type: 'hotspot', id: zone.id, intensity, phase: idx * 0.78, originalScale: 1.0 };
+                hotspotGroup.add(halo);
+                hotspotHalos.push(halo);
+                interactiveObjects.push(halo);
+
+                // Pulsing glow ring (animated opacity)
+                const ringGeometry = new THREE.RingGeometry(radius * 0.8, radius, 32);
+                const ringMaterial = new THREE.MeshBasicMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: 0.3,
+                    side: THREE.DoubleSide
+                });
+                const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+                ring.rotation.x = -Math.PI / 2;
+                ring.position.set(centerX, 0.06, centerY);
+                ring.userData = { phase: idx * 0.78, originalScale: 1.0 };
+                hotspotGroup.add(ring);
+                hotspotHalos.push(ring);
+
+                // Point light at hotspot center for ambient glow
+                const light = new THREE.PointLight(0xff4400, intensity * 2, radius * 1.5);
+                light.position.set(centerX, 3, centerY);
+                hotspotGroup.add(light);
+            });
+        }
+        
+        // Create street lights group
+        const streetLightsGroup = new THREE.Group();
+        scene.add(streetLightsGroup);
+
+        function createStreetLights() {
+            if (!urbanData.roads) return;
+
+            const LIGHT_SPACING = 25; // Uniform spacing: one light every 25 units
+            const SIDE_OFFSET = 4; // Distance from center of road to lamp
+
+            urbanData.roads.forEach((road) => {
+                const start = new THREE.Vector3(road.start?.x || 0, 0, road.start?.y || 0);
+                const end = new THREE.Vector3(road.end?.x || 100, 0, road.end?.y || 0);
+
+                const direction = end.clone().sub(start).normalize();
+                const length = start.distanceTo(end);
+
+                // Perpendicular direction (rotate 90 degrees)
+                const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+
+                const numLights = Math.max(2, Math.ceil(length / LIGHT_SPACING)); // Uniform interval
+
+                for (let i = 0; i < numLights; i++) {
+                    const t = i / Math.max(1, numLights - 1);
+                    const centerPos = start.clone().lerp(end, t);
+
+                    // Place lights on alternating sides of road
+                    const side = (i % 2 === 0) ? 1 : -1;
+                    const offset = perpendicular.clone().multiplyScalar(side * SIDE_OFFSET);
+                    const pos = centerPos.clone().add(offset);
+
+                    // Light pole (post)
+                    const poleGeometry = new THREE.CylinderGeometry(0.3, 0.35, 8, 8);
+                    const poleMaterial = new THREE.MeshStandardMaterial({
+                        color: 0x333333,
+                        metalness: 0.6,
+                        roughness: 0.4
+                    });
+                    const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+                    pole.position.set(pos.x, 4, pos.z);
+                    streetLightsGroup.add(pole);
+
+                    // Lamp head
+                    const lampGeometry = new THREE.SphereGeometry(0.8, 16, 16);
+                    const lampMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffff99,
+                        emissive: 0xffff99,
+                        emissiveIntensity: 0.3
+                    });
+                    const lamp = new THREE.Mesh(lampGeometry, lampMaterial);
+                    lamp.position.set(pos.x, 8, pos.z);
+                    streetLightsGroup.add(lamp);
+
+                    // Point light (illuminates at night)
+                    const pointLight = new THREE.PointLight(0xffff99, 1.5, 40);
+                    pointLight.position.set(pos.x, 7.5, pos.z);
+                    streetLightsGroup.add(pointLight);
+                }
+            });
+
+            streetLightsGroup.visible = false; // Hidden during day
+        }
+
+        // Initialize scene
+        createRoads();
+        createBuildings();
+        createTrees();
+        createVehicles();
+        createHotspots();
+        createMitigation();
+        createStreetLights();
+        
+        // Raycaster for interaction
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const tooltip = document.getElementById('tooltip');
+        
+        function onMouseMove(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactiveObjects);
+            
+            if (intersects.length > 0) {
+                const obj = intersects[0].object;
+                const data = obj.userData;
+                
+                tooltip.style.display = 'block';
+                tooltip.style.left = event.clientX + 15 + 'px';
+                tooltip.style.top = event.clientY + 15 + 'px';
+                
+                if (data.type === 'building') {
+                    tooltip.innerHTML = `
+                        <strong>🏢 ${data.buildingType || 'Building'}</strong><br>
+                        ID: ${data.id}<br>
+                        Height: ${data.height?.toFixed(1)}m (${data.floors} floors)<br>
+                        Heat Exposure: ${(data.heatExposure * 100).toFixed(1)}%<br>
+                        ${data.hasGreenRoof ? '🌿 Green Roof' : ''}
+                    `;
+                } else if (data.type === 'tree') {
+                    tooltip.innerHTML = `
+                        <strong>🌳 ${data.treeType || 'Tree'}</strong><br>
+                        ID: ${data.id}<br>
+                        Height: ${data.height?.toFixed(1)}m<br>
+                        Cooling Effect: ${(data.coolingEffect * 100).toFixed(0)}%
+                    `;
+                }
+            } else {
+                tooltip.style.display = 'none';
+            }
+        }
+        
+        window.addEventListener('mousemove', onMouseMove);
+
+        // Click handler for building mitigation panel
+        window.addEventListener('click', (event) => {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactiveObjects);
+
+            if (intersects.length > 0) {
+                const obj = intersects[0].object;
+                const data = obj.userData;
+
+                if (data.type === 'building') {
+                    showMitigationPanel(data);
+                }
+            }
+        });
+
+        function showMitigationPanel(buildingData) {
+            const strategies = [
+                { name: 'Street Tree Planting', cooling: 2.5, cost: 45, timeline: 6 },
+                { name: 'Urban Parks & Green Spaces', cooling: 3.5, cost: 85, timeline: 18 },
+                { name: 'Green Roofs (Extensive)', cooling: 1.8, cost: 120, timeline: 4 },
+                { name: 'Cool Pavements', cooling: 1.5, cost: 35, timeline: 3 }
+            ];
+
+            let html = `<div style="margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid #333;">
+                <strong style="color: #4ecdc4;">Building Info</strong><br>
+                <span style="font-size: 12px; color: #aaa;">Heat Exposure: ${(buildingData.heatExposure * 100).toFixed(1)}%</span><br>
+                <span style="font-size: 12px; color: #aaa;">Est. Temp: ${(28 + buildingData.heatExposure * 10).toFixed(1)}°C</span>
+            </div>`;
+
+            html += '<strong style="color: #4ecdc4; display: block; margin-bottom: 10px;">Recommended Strategies</strong>';
+            strategies.forEach(s => {
+                html += `<div style="background: rgba(78, 205, 196, 0.1); padding: 10px; margin: 8px 0; border-left: 3px solid #4ecdc4; border-radius: 4px; font-size: 12px;">
+                    <div style="font-weight: bold; color: #4ecdc4;">${s.name}</div>
+                    <div style="color: #ff6b6b; margin-top: 4px;">Cooling: −${s.cooling}°C</div>
+                    <div style="color: #aaa; font-size: 11px;">Cost: $${s.cost}/m² | Timeline: ${s.timeline} months</div>
+                </div>`;
+            });
+
+            document.getElementById('strategiesList').innerHTML = html;
+            document.getElementById('mitigationPanel').style.display = 'block';
+        }
+
+        // UI Controls
+        document.getElementById('resetCamera').onclick = () => {
+            camera.position.set(150, 120, 150);
+            controls.target.set(terrainSize.width/2, 0, terrainSize.depth/2);
+        };
+        
+        document.getElementById('toggleBuildings').onclick = () => {
+            buildingGroup.visible = !buildingGroup.visible;
+        };
+        
+        document.getElementById('toggleTrees').onclick = () => {
+            treeGroup.visible = !treeGroup.visible;
+        };
+        
+        document.getElementById('toggleHeatmap').onclick = () => {
+            hotspotGroup.visible = !hotspotGroup.visible;
+        };
+
+        document.getElementById('toggleMitigation').onclick = () => {
+            toggleMitigation();
+            document.getElementById('tempReduction').style.display = mitigationGroup.visible ? 'block' : 'none';
+            if (mitigationGroup.visible) {
+                updateTempStats();
+            }
+        };
+
+        function updateTempStats() {
+            const strategies = [
+                { name: 'Street Tree Planting', cooling: 2.5 },
+                { name: 'Urban Parks', cooling: 3.5 },
+                { name: 'Green Roofs', cooling: 1.8 },
+                { name: 'Cool Pavements', cooling: 1.5 }
+            ];
+            const totalCooling = strategies.reduce((sum, s) => sum + s.cooling, 0);
+            let html = '';
+            strategies.forEach(s => {
+                html += `<div style="display: flex; justify-content: space-between; margin: 6px 0;"><span>${s.name}:</span><span style="color: #ff6b6b;">−${s.cooling}°C</span></div>`;
+            });
+            html += `<div style="border-top: 1px solid #333; margin: 8px 0; padding-top: 8px; font-weight: bold;">Estimated Total: −${totalCooling.toFixed(1)}°C</div>`;
+            document.getElementById('tempStats').innerHTML = html;
+        }
+
+        document.getElementById('dayNightToggle').onclick = function() {
+            this.classList.toggle('active');
+            isNightMode = !isNightMode;
+            
+            if (isNightMode) {
+                scene.background = nightBackground;
+                scene.fog.color = nightBackground;
+                sunLight.intensity = 0.2;
+                ambientLight.intensity = 0.15;
+
+                // Show street lights at night
+                streetLightsGroup.visible = true;
+
+                // Make windows glow at night
+                buildingGroup.traverse((child) => {
+                    if (child.material && child.material.emissive) {
+                        child.material.emissiveIntensity = 0.5;
+                    }
+                });
+            } else {
+                scene.background = dayBackground;
+                scene.fog.color = dayBackground;
+                sunLight.intensity = 0.8;
+                ambientLight.intensity = 0.4;
+
+                // Hide street lights during day
+                streetLightsGroup.visible = false;
+
+                buildingGroup.traverse((child) => {
+                    if (child.material && child.material.emissive) {
+                        child.material.emissiveIntensity = 0.1;
+                    }
+                });
+            }
+        };
+        
+        // VR Button
+        document.getElementById('vrButton').onclick = () => {
+            if (navigator.xr) {
+                navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                    if (supported) {
+                        renderer.xr.enabled = true;
+                        document.body.appendChild(document.createElement('button'));
+                    } else {
+                        alert('VR not supported on this device');
+                    }
+                });
+            } else {
+                alert('WebXR not available');
+            }
+        };
+        
+        // Window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Stats display
+        const statsDiv = document.getElementById('stats');
+        
+        // Animation loop
+        let lastTime = 0;
+        function animate(time) {
+            requestAnimationFrame(animate);
+            controls.update();
+
+            // Animate hotspot glow rings and halos
+            const t = time * 0.003;
+            hotspotGroup.children.forEach((child) => {
+                if (child.userData.phase !== undefined && child.material.opacity !== undefined) {
+                    // Pulsing glow effect: 0.2 to 0.45 opacity
+                    child.material.opacity = 0.2 + 0.25 * Math.sin(t + child.userData.phase);
+                }
+            });
+
+            // Animate vehicles moving along roads
+            vehicleGroup.children.forEach((vehicleGroup_item) => {
+                if (vehicleGroup_item.userData.type === 'vehicle' && vehicleGroup_item.userData.roadData) {
+                    const road = vehicleGroup_item.userData.roadData;
+                    const speed = vehicleGroup_item.userData.speed || 20;
+                    const roadLength = Math.hypot(
+                        (road.end?.x || 0) - (road.start?.x || 0),
+                        (road.end?.y || 0) - (road.start?.y || 0)
+                    );
+
+                    // Update position along road (0-1)
+                    vehicleGroup_item.userData.position += (speed / roadLength) * (time - lastTime) / 1000;
+                    if (vehicleGroup_item.userData.position > 1) {
+                        vehicleGroup_item.userData.position = 0; // Loop back
+                    }
+
+                    // Interpolate position on road
+                    const t = vehicleGroup_item.userData.position;
+                    const startX = road.start?.x || 0;
+                    const startY = road.start?.y || 0;
+                    const endX = road.end?.x || 100;
+                    const endY = road.end?.y || 0;
+
+                    vehicleGroup_item.position.x = startX + (endX - startX) * t;
+                    vehicleGroup_item.position.z = startY + (endY - startY) * t;
+                    vehicleGroup_item.position.y = 0.75; // Height above ground
+
+                    // Orient vehicle along road direction
+                    const direction = new THREE.Vector3(endX - startX, 0, endY - startY).normalize();
+                    vehicleGroup_item.rotation.y = Math.atan2(direction.x, direction.z);
+                }
+            });
+
+            // Update stats
+            if (time - lastTime > 500) {
+                const fps = Math.round(1000 / (time - lastTime) * 2);
+                statsDiv.innerHTML = `FPS: ~${fps}<br>Objects: ${scene.children.length}`;
+                lastTime = time;
+            }
+
+            renderer.render(scene, camera);
+        }
+        
+        animate(0);
+    </script>
+</body>
+</html>
